@@ -46,9 +46,9 @@ Leaderboard for a training group, powered by the Strava API.
 - Season = name + start date + end date. Only activities inside the season score. Leaderboard is per season. Backfill covers the season range.
 
 ## Strava constraints
-- New API apps are limited to 1 athlete until Strava approves a capacity increase (request early).
+- New apps start in single-player mode (only the owner's Strava account can authenticate). Upgrade from the API Settings Dashboard raises capacity to 10 athletes (read limits 200 req/15min, 2000/day; overall 400/15min, 4000/day). Beyond 10 athletes, submit the app for review. Plan: develop in single-player mode, upgrade to 10 once there is something to test.
 - Webhook payload contains only IDs/event type; fetch the activity with the user's token. Access tokens expire (6h), refresh needed.
-- Rate limits (~100 req/15 min, ~1000/day by default): no polling.
+- Rate limits (see above): no polling.
 - Dev needs a public tunnel (cloudflared/ngrok) for webhooks.
 - Strava terms restrict showing a user's data to other users; acceptable for a small private group.
 
