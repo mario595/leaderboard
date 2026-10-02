@@ -28,7 +28,7 @@ func TestNew_level(t *testing.T) {
 		out := buf.String()
 
 		if !strings.Contains(out, "msg=Warning") {
-			t.Errorf("output = %q, want it to contain msg=hello", out)
+			t.Errorf("output = %q, want it to contain msg=Warning", out)
 		}
 
 	})
