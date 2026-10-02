@@ -69,7 +69,7 @@ Leaderboard for a training group, powered by the Strava API.
 - Deauthorization handling (delete user data).
 
 ## Project state
-- GitHub repo: mario595/leaderboard (private).
+- GitHub repo: mario595/leaderboard (private). Project: https://github.com/users/mario595/projects/6
 - Tickets: pending approval of the breakdown.
 
 ## Decisions log
