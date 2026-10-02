@@ -5,11 +5,15 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 // NewRouter builds the http router with all the application routes.
 func NewRouter(logger *slog.Logger) http.Handler {
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(requestLogger(logger))
+	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthHandler(logger))
 
