@@ -70,7 +70,7 @@ Leaderboard for a training group, powered by the Strava API.
 
 ## Project state
 - GitHub repo: mario595/leaderboard (private). Project: https://github.com/users/mario595/projects/6
-- Tickets: pending approval of the breakdown.
+- Tickets: issues #1-#24 created, grouped in milestones M0-M8 (M0 Setup, M1 Persistence, M2 Auth, M3 Scoring, M4 Strava client, M5 Webhooks, M6 API, M7 Frontend, M8 Backfill and deploy). Issue number order = suggested implementation order.
 
 ## Decisions log
 - Router: chi chosen over Gin (net/http compatible, idiomatic, transferable).
