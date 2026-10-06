@@ -16,7 +16,7 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name: "Addr",
-			env:  map[string]string{"ADDR": "8000"},
+			env:  map[string]string{"ADDR": ":8000"},
 			want: Config{Addr: ":8000", Env: "dev", LogLevel: "info", DBPath: "data/leaderboard.db"},
 		},
 		{
