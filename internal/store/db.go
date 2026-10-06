@@ -10,6 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Open opens (creating it if needed) the SQLite database at path.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create database directory: %w", err)
