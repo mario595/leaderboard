@@ -1,4 +1,4 @@
-.PHONY: run build test vet
+.PHONY: run build test vet lint
 
 run:
 	set -a; if [ -f .env ]; then . ./.env; fi; set +a; go run ./cmd/server
@@ -11,3 +11,6 @@ test:
 
 vet:
 	go vet ./...
+
+lint:
+	golangci-lint run
