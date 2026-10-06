@@ -16,6 +16,7 @@ Mario is a software engineer (Java, Groovy, Grails, Python, Django, some React/T
 5. For each ticket, Claude writes a spec Mario follows, split into small steps.
 6. After each step Mario asks for review. Claude gives useful insights.
 7. When stuck, Mario asks. Claude explains and points the way without writing the solution.
+8. Git: one branch per ticket (`feature/<n>-<slug>`), small meaningful commits, PR to `main` with `Closes #<n>`. Claude commits and opens the PR when Mario says so; Mario reviews and merges. No direct commits to `main`.
 
 ## Spec format
 - Written like a senior engineer handing work to a junior: "create file X with type Y", "add method Z to X", "modify file X to include Y".
@@ -27,6 +28,9 @@ Mario is a software engineer (Java, Groovy, Grails, Python, Django, some React/T
 - No code written for Mario unless told otherwise. Small illustrative snippets only if explicitly requested.
 - Reviews: point out idiomatic issues, conventions, pitfalls, and why.
 - Keep communication direct and brief (see global CLAUDE.md).
+- Every spec step starts with a short summary of what it builds and why.
+- Mario asked for more verbosity when new concepts appear: explain each construct, and copyable code with explanations is OK for new syntax. He still writes the substantive logic and tests himself; Claude reads files directly to review (no copy/paste needed) and runs the checks (`gofmt`, `go vet`, `go test`).
+- Always push for "mutation checks" (break the code on purpose to see a test fail) and positive controls in tests.
 - Core philosophies: lean MVP, frugality (free/open-source), simplicity.
 
 ## App description
@@ -71,6 +75,16 @@ Leaderboard for a training group, powered by the Strava API.
 ## Project state
 - GitHub repo: mario595/leaderboard (private). Project: https://github.com/users/mario595/projects/6
 - Tickets: issues #1-#24 created, grouped in milestones M0-M8 (M0 Setup, M1 Persistence, M2 Auth, M3 Scoring, M4 Strava client, M5 Webhooks, M6 API, M7 Frontend, M8 Backfill and deploy). Issue number order = suggested implementation order.
+- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton, PR #25 merged).
+- In progress: #4 (CI with GitHub Actions) on branch `feature/4-ci`.
+- Layout so far: `cmd/server/main.go`, `internal/config`, `internal/logging`, `internal/httpapi` (router, health, middleware), `Makefile`, `.vscode/launch.json`.
+- Local setup notes: Go 1.27.1 in `/usr/local/go`; `gcc` not installed yet, so `go test -race` does not work (needs cgo): `sudo apt install build-essential` before #14. `.env` holds `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` (git-ignored; `.env.example` lists names). Never read or print `.env`.
 
 ## Decisions log
 - Router: chi chosen over Gin (net/http compatible, idiomatic, transferable).
+- Module path: `github.com/mario595/leaderboard`. Packages under `internal/`, one binary under `cmd/server`.
+- Config: `config.Load(getenv func(string) string)` (injected for testability); env vars `ADDR` (default `:8080`), `ENV` (`dev`|`prod`, default `dev`), `LOG_LEVEL` (`debug|info|warn|error`, default `info`). Case-sensitive. Reports only the first error (could use `errors.Join` later).
+- Logging: `logging.New(w io.Writer, env, level string)`; text handler in dev, JSON in prod. Logger is passed explicitly, no global.
+- HTTP: `NewRouter(logger) http.Handler`; middleware order RequestID, requestLogger, Recoverer (logger outside Recoverer so panics are logged as 500). Request log logs `r.URL.Path` only (query strings may contain OAuth codes).
+- Server: `main` calls `run() error`; all four server timeouts set; graceful shutdown with a fresh 10s context.
+- Tests: table-driven with `t.Run`, `httptest`, `bytes.Buffer` as log sink, test files named after the file under test.
