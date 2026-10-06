@@ -35,13 +35,13 @@ func TestRoundtrip(t *testing.T) {
 	}
 
 	assertEqual(t, "StravaID", u.StravaID, result.StravaID)
+	assertEqual(t, "FirstName", u.FirstName, result.FirstName)
 	assertEqual(t, "LastName", u.LastName, result.LastName)
 	assertEqual(t, "AccessToken", u.AccessToken, result.AccessToken)
 	assertEqual(t, "RefreshToken", u.RefreshToken, result.RefreshToken)
 	assertTime(t, "TokenExpiresAt", u.TokenExpiresAt, result.TokenExpiresAt)
 	assertTime(t, "CreatedAt", fixed, result.CreatedAt)
 	assertTime(t, "UpdatedAt", fixed, result.UpdatedAt)
-
 }
 
 func TestUpsertUpdatesNotDuplicates(t *testing.T) {
@@ -78,7 +78,7 @@ func TestUpsertUpdatesNotDuplicates(t *testing.T) {
 	assertEqual(t, "ID", insertedUser.ID, result.ID)
 	assertEqual(t, "FirstName", "Anakin", result.FirstName)
 	assertEqual(t, "AccessToken", "secondAccessToken123", result.AccessToken)
-	assertTime(t, "CreatedAt", result.CreatedAt, insertedUser.CreatedAt)
+	assertTime(t, "CreatedAt", t0, result.CreatedAt)
 	assertTime(t, "UpdatedAt", result.UpdatedAt, t1)
 }
 
