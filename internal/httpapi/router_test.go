@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -36,12 +35,12 @@ func TestRouter(t *testing.T) {
 		},
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	router := NewRouter(logger)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
 			rec := httptest.NewRecorder()
 
 			router.ServeHTTP(rec, req)
