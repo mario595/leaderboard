@@ -52,7 +52,7 @@ func TestMiddleware(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			buf.Reset()
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
 			res := httptest.NewRecorder()
 			tc.router.ServeHTTP(res, req)
 			out := decodeLogLine(t, &buf)
