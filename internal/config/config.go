@@ -10,6 +10,7 @@ type Config struct {
 	Addr     string
 	Env      string
 	LogLevel string
+	DBPath   string
 }
 
 var validEnvs = []string{"dev", "prod"}
@@ -28,6 +29,7 @@ func Load(getenv func(string) string) (Config, error) {
 		Addr:     getOr(getenv, "ADDR", ":8080"),
 		Env:      getOr(getenv, "ENV", "dev"),
 		LogLevel: getOr(getenv, "LOG_LEVEL", "info"),
+		DBPath:   getOr(getenv, "DB_PATH", "data/leaderboard.db"),
 	}
 
 	if !slices.Contains(validEnvs, cfg.Env) {

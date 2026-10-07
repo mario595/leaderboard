@@ -12,27 +12,27 @@ func TestLoad(t *testing.T) {
 		{
 			name: "defaults",
 			env:  map[string]string{},
-			want: Config{Addr: ":8080", Env: "dev", LogLevel: "info"},
+			want: Config{Addr: ":8080", Env: "dev", LogLevel: "info", DBPath: "data/leaderboard.db"},
 		},
 		{
 			name: "Addr",
-			env:  map[string]string{"ADDR": "8000"},
-			want: Config{Addr: "8000", Env: "dev", LogLevel: "info"},
+			env:  map[string]string{"ADDR": ":8000"},
+			want: Config{Addr: ":8000", Env: "dev", LogLevel: "info", DBPath: "data/leaderboard.db"},
 		},
 		{
 			name: "Env",
 			env:  map[string]string{"ENV": "prod"},
-			want: Config{Addr: ":8080", Env: "prod", LogLevel: "info"},
+			want: Config{Addr: ":8080", Env: "prod", LogLevel: "info", DBPath: "data/leaderboard.db"},
 		},
 		{
 			name: "LogLevel",
 			env:  map[string]string{"LOG_LEVEL": "debug"},
-			want: Config{Addr: ":8080", Env: "dev", LogLevel: "debug"},
+			want: Config{Addr: ":8080", Env: "dev", LogLevel: "debug", DBPath: "data/leaderboard.db"},
 		},
 		{
 			name: "all at once",
-			env:  map[string]string{"ADDR": ":8000", "ENV": "prod", "LOG_LEVEL": "debug"},
-			want: Config{Addr: ":8000", Env: "prod", LogLevel: "debug"},
+			env:  map[string]string{"ADDR": ":8000", "ENV": "prod", "LOG_LEVEL": "debug", "DB_PATH": "data/somedb.db"},
+			want: Config{Addr: ":8000", Env: "prod", LogLevel: "debug", DBPath: "data/somedb.db"},
 		},
 		{
 			name:    "LogLevel error",

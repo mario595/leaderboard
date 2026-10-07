@@ -37,3 +37,6 @@ npm-debug.log*
 !.vscode/extensions.json
 .idea/
 .DS_Store
+
+# Debugger binaries
+__debug_bin*
