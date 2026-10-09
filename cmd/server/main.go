@@ -28,7 +28,7 @@ func main() {
 	switch cmd {
 	case "season":
 		if err := runSeason(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, "season failed: %w", err)
+			fmt.Fprintf(os.Stderr, "season failed: %v\n", err)
 			os.Exit(1)
 		}
 	case "serve":
@@ -43,8 +43,17 @@ func main() {
 }
 
 func runSeason(args []string) error {
-	// TODO
-	return nil
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	_, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	st := store.NewSeasonStore(db)
+	return seasonCommand(ctx, st, args, os.Stdout)
 }
 
 func runServer() error {
