@@ -75,9 +75,9 @@ Leaderboard for a training group, powered by the Strava API.
 ## Project state
 - GitHub repo: mario595/leaderboard (private). Project: https://github.com/users/mario595/projects/6
 - Tickets: issues #1-#24 created, grouped in milestones M0-M8 (M0 Setup, M1 Persistence, M2 Auth, M3 Scoring, M4 Strava client, M5 Webhooks, M6 API, M7 Frontend, M8 Backfill and deploy). Issue number order = suggested implementation order.
-- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton, PR #25 merged).
-- In progress: #4 (CI with GitHub Actions) on branch `feature/4-ci`.
-- Layout so far: `cmd/server/main.go`, `internal/config`, `internal/logging`, `internal/httpapi` (router, health, middleware), `Makefile`, `.vscode/launch.json`.
+- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton), #4 (CI), #5 (SQLite, migrations, user store).
+- In progress: #6 (seasons) on branch `feature/6-seasons`.
+- Layout so far: `cmd/server/main.go`, `internal/config`, `internal/logging`, `internal/httpapi` (router, health, middleware), `internal/store` (db, migrate, embedded SQL migrations, users), `Makefile`, `.golangci.yml`, `.github/workflows/ci.yml`, `.vscode/launch.json`.
 - Local setup notes: Go 1.27.1 in `/usr/local/go`; `gcc` not installed yet, so `go test -race` does not work (needs cgo): `sudo apt install build-essential` before #14. `.env` holds `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` (git-ignored; `.env.example` lists names). Never read or print `.env`.
 
 ## Decisions log
@@ -88,3 +88,8 @@ Leaderboard for a training group, powered by the Strava API.
 - HTTP: `NewRouter(logger) http.Handler`; middleware order RequestID, requestLogger, Recoverer (logger outside Recoverer so panics are logged as 500). Request log logs `r.URL.Path` only (query strings may contain OAuth codes).
 - Server: `main` calls `run() error`; all four server timeouts set; graceful shutdown with a fresh 10s context.
 - Tests: table-driven with `t.Run`, `httptest`, `bytes.Buffer` as log sink, test files named after the file under test.
+- CI: GitHub Actions, `test` job (gofmt, vet, test) and `lint` job (golangci-lint v2.14, config in `.golangci.yml` with errorlint, noctx, sloglint, bodyclose, misspell, gofmt). Check configs with `golangci-lint config verify`.
+- DB: SQLite via `modernc.org/sqlite` (driver name `sqlite`), `database/sql` pool limited to one connection, pragmas in the DSN (busy_timeout, WAL, foreign_keys), goose migrations embedded with `go:embed` and applied at startup. Times stored as unix-second INTEGERs; the store has an injectable `now` clock for tests. Relative `DB_PATH` resolves from the working directory (launch.json uses cwd = repo root). Tokens stored in plain text (MVP; encrypt later).
+- Stretch idea: migrate the hand-written store to `sqlc` once there are several stores.
+- Tests: mutation checks catch weak assertions (run them on a copy, never trust a test that has not failed once).
+- Seasons (#6): dates stored as TEXT `YYYY-MM-DD`, inclusive bounds, overlap check in a transaction.

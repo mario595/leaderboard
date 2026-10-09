@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,35 +19,56 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		slog.Error("server failed", "error", err)
-		os.Exit(1)
+	args := os.Args[1:]
+	cmd := "serve"
+	if len(args) > 0 {
+		cmd = args[0]
+	}
+
+	switch cmd {
+	case "season":
+		if err := runSeason(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "season failed: %v\n", err)
+			os.Exit(1)
+		}
+	case "serve":
+		if err := runServer(); err != nil {
+			slog.Error("server failed", "error", err)
+			os.Exit(1)
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "Invalid command. Use season or serve")
+		os.Exit(2)
 	}
 }
 
-func run() error {
+func runSeason(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.Load(os.Getenv)
+	_, db, err := openDatabase(ctx)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("openDatabase: %w", err)
 	}
+	defer func() { _ = db.Close() }()
+
+	st := store.NewSeasonStore(db)
+	return seasonCommand(ctx, st, args, os.Stdout)
+}
+
+func runServer() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
 
 	logger, err := logging.New(os.Stdout, cfg.Env, cfg.LogLevel)
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
-	}
-
-	db, err := store.Open(ctx, cfg.DBPath)
-	if err != nil {
-		return fmt.Errorf("open db: %w", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	err = store.Migrate(ctx, db)
-	if err != nil {
-		return fmt.Errorf("migrate database: %w", err)
 	}
 	logger.Info("database ready", "path", cfg.DBPath)
 
@@ -88,4 +110,24 @@ func run() error {
 	logger.Info("server stopped")
 
 	return nil
+}
+
+// OpenDatabase opens a DB connection. Caller must close it.
+func openDatabase(ctx context.Context) (config.Config, *sql.DB, error) {
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("load config: %w", err)
+	}
+	db, err := store.Open(ctx, cfg.DBPath)
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("open db: %w", err)
+	}
+
+	err = store.Migrate(ctx, db)
+	if err != nil {
+		_ = db.Close()
+		return config.Config{}, nil, fmt.Errorf("migrate database: %w", err)
+	}
+
+	return cfg, db, nil
 }
