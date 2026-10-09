@@ -66,6 +66,14 @@ func runServer() error {
 	}
 	defer func() { _ = db.Close() }()
 
+	if cfg.StravaClientID == "" {
+		return fmt.Errorf("STRAVA_CLIENT_ID is required to run the server")
+	}
+
+	if cfg.StravaClientSecret == "" {
+		return fmt.Errorf("STRAVA_CLIENT_SECRET is required to run the server")
+	}
+
 	logger, err := logging.New(os.Stdout, cfg.Env, cfg.LogLevel)
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
