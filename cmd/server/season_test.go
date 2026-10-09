@@ -17,7 +17,9 @@ func TestSeasonCommand_CreateAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create command: %v", err)
 	}
-	strings.Contains(str, "no seasons")
+	if !strings.Contains(str, "no seasons") {
+		t.Errorf("missing 'no seasons'")
+	}
 
 	str, err = runSeasonCmd(t, st, "create", "-name", "Autumn 2026", "-start", "2026-09-01", "-end", "2026-12-31")
 

@@ -22,7 +22,7 @@ func seasonCommand(ctx context.Context, st *store.SeasonStore, args []string, st
 	case "list":
 		return listCommand(ctx, st, args[1:], stdout)
 	default:
-		return fmt.Errorf("usage: serve season create|list. Unknown command %v", args[0])
+		return fmt.Errorf("usage: server season create|list. Unknown command: %v", args[0])
 	}
 
 }
