@@ -87,7 +87,7 @@ func TestParseDate(t *testing.T) {
 		t.Errorf("ParseDate: %v", err)
 	}
 	expected := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
-	if date != expected {
+	if !date.Equal(expected) {
 		t.Errorf("Incorrect date parsed, expected: %v, got %v ", expected, date)
 	}
 

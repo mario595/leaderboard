@@ -31,7 +31,7 @@ func (s Season) Validate() error {
 	return nil
 }
 
-// Parses as string to time. The string must have the format "YYYY-MM-DD"
+// ParseDate parses a date in the format "YYYY-MM-DD"
 func ParseDate(s string) (time.Time, error) {
 	t, err := time.Parse(time.DateOnly, s)
 	if err != nil {
