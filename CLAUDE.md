@@ -75,9 +75,9 @@ Leaderboard for a training group, powered by the Strava API.
 ## Project state
 - GitHub repo: mario595/leaderboard (private). Project: https://github.com/users/mario595/projects/6
 - Tickets: issues #1-#24 created, grouped in milestones M0-M8 (M0 Setup, M1 Persistence, M2 Auth, M3 Scoring, M4 Strava client, M5 Webhooks, M6 API, M7 Frontend, M8 Backfill and deploy). Issue number order = suggested implementation order.
-- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton), #4 (CI), #5 (SQLite, migrations, user store).
-- In progress: #6 (seasons) on branch `feature/6-seasons`.
-- Layout so far: `cmd/server/main.go`, `internal/config`, `internal/logging`, `internal/httpapi` (router, health, middleware), `internal/store` (db, migrate, embedded SQL migrations, users), `Makefile`, `.golangci.yml`, `.github/workflows/ci.yml`, `.vscode/launch.json`.
+- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton), #4 (CI), #5 (SQLite, migrations, user store), #6 (seasons: table, store, `server season create|list` CLI).
+- In progress: #7 (Strava OAuth login) on branch `feature/7-strava-oauth`.
+- Layout so far: `cmd/server/main.go`, `internal/config`, `internal/logging`, `internal/httpapi` (router, health, middleware), `internal/store` (db, migrate, embedded SQL migrations, users, seasons), `Makefile`, `.golangci.yml`, `.github/workflows/ci.yml`, `.vscode/launch.json`.
 - Local setup notes: Go 1.27.1 in `/usr/local/go`; `gcc` not installed yet, so `go test -race` does not work (needs cgo): `sudo apt install build-essential` before #14. `.env` holds `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` (git-ignored; `.env.example` lists names). Never read or print `.env`.
 
 ## Decisions log
@@ -93,3 +93,6 @@ Leaderboard for a training group, powered by the Strava API.
 - Stretch idea: migrate the hand-written store to `sqlc` once there are several stores.
 - Tests: mutation checks catch weak assertions (run them on a copy, never trust a test that has not failed once).
 - Seasons (#6): dates stored as TEXT `YYYY-MM-DD`, inclusive bounds, overlap check in a transaction.
+- CLI: one binary. `server` or `server serve` runs the web server; `server season create -name N -start YYYY-MM-DD -end YYYY-MM-DD` and `server season list` manage seasons; unknown commands exit with code 2. Shared setup in `openDatabase` (caller closes the DB). Command logic takes the store, args and an `io.Writer` so it is testable.
+- Seasons: overlap check relies on SQLite's single writer (and the one-connection pool); on PostgreSQL it would need an exclusion constraint or SERIALIZABLE isolation with retry.
+- Strava OAuth (#7): `golang.org/x/oauth2` has `endpoints.Strava`; request scopes `read` and `activity:read`; check the granted `scope` on the callback (users can untick scopes); state in a short-lived cookie; the `auth` package defines the `UserStore` interface it needs (consumer-defined). Never log tokens or the client secret.
