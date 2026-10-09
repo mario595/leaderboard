@@ -65,6 +65,38 @@ func TestSeasonStore_createAndList(t *testing.T) {
 		t.Errorf("Unexpected With in OverlapError. Expected %d, got %d", s.ID, oe.With.ID)
 	}
 
+	// Another overlap
+	season.Name = "Second Test Season"
+	season.StartDate = date(t, "2026-11-15")
+	season.EndDate = date(t, "2026-11-17")
+	_, err = st.Create(t.Context(), season)
+	if err == nil {
+		t.Fatalf("Create: Expected error")
+	}
+	if !errors.As(err, &oe) {
+		t.Fatalf("Unexpected error, expected OverlapError, got %v", err)
+	}
+
+	if oe.With.ID != s.ID {
+		t.Errorf("Unexpected With in OverlapError. Expected %d, got %d", s.ID, oe.With.ID)
+	}
+
+	// Another overlap
+	season.Name = "Second Test Season"
+	season.StartDate = date(t, "2026-11-11")
+	season.EndDate = date(t, "2026-11-13")
+	_, err = st.Create(t.Context(), season)
+	if err == nil {
+		t.Fatalf("Create: Expected error")
+	}
+	if !errors.As(err, &oe) {
+		t.Fatalf("Unexpected error, expected OverlapError, got %v", err)
+	}
+
+	if oe.With.ID != s.ID {
+		t.Errorf("Unexpected With in OverlapError. Expected %d, got %d", s.ID, oe.With.ID)
+	}
+
 	// List still holds only one season
 	seasons, err = st.List(t.Context())
 	if err != nil {
