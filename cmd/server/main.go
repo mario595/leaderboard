@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mario595/leaderboard/internal/auth"
 	"github.com/mario595/leaderboard/internal/config"
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
@@ -79,8 +80,14 @@ func runServer() error {
 		return fmt.Errorf("create logger: %w", err)
 	}
 	logger.Info("database ready", "path", cfg.DBPath)
+	oauthCfg := auth.NewOauthConfig(cfg.StravaClientID, cfg.StravaClientSecret, cfg.BaseURL)
+	userStore := store.NewUserStore(db)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	secureCookies := cfg.Env == "prod"
+	authHandler := auth.New(oauthCfg, userStore, logger, httpClient, secureCookies)
+	var _ auth.UserStore = (*store.UserStore)(nil)
 
-	router := httpapi.NewRouter(logger)
+	router := httpapi.NewRouter(logger, authHandler)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
