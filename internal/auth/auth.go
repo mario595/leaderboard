@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/mario595/leaderboard/internal/store"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/endpoints"
 )
@@ -16,6 +17,8 @@ type UserStore interface {
 	// Upsert inserts the user, or updates it if its Strava ID already exists.
 	Upsert(ctx context.Context, u store.User) (store.User, error)
 }
+
+var _ UserStore = (*store.UserStore)(nil)
 
 // Handler serves the Strava OAuth login and callback endpoints.
 type Handler struct {
