@@ -10,7 +10,7 @@ import (
 
 func TestHealthz(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	router := NewRouter(logger)
+	router := NewRouter(logger, nil)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()

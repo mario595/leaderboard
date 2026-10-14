@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mario595/leaderboard/internal/auth"
 	"github.com/mario595/leaderboard/internal/config"
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
@@ -66,13 +67,26 @@ func runServer() error {
 	}
 	defer func() { _ = db.Close() }()
 
+	if cfg.StravaClientID == "" {
+		return fmt.Errorf("STRAVA_CLIENT_ID is required to run the server")
+	}
+
+	if cfg.StravaClientSecret == "" {
+		return fmt.Errorf("STRAVA_CLIENT_SECRET is required to run the server")
+	}
+
 	logger, err := logging.New(os.Stdout, cfg.Env, cfg.LogLevel)
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
 	}
 	logger.Info("database ready", "path", cfg.DBPath)
+	oauthCfg := auth.NewOauthConfig(cfg.StravaClientID, cfg.StravaClientSecret, cfg.BaseURL)
+	userStore := store.NewUserStore(db)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	secureCookies := cfg.Env == "prod"
+	authHandler := auth.New(oauthCfg, userStore, logger, httpClient, secureCookies)
 
-	router := httpapi.NewRouter(logger)
+	router := httpapi.NewRouter(logger, authHandler)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
