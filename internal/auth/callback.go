@@ -1,11 +1,23 @@
 package auth
 
 import (
+	"context"
 	"crypto/subtle"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/mario595/leaderboard/internal/store"
+	"golang.org/x/oauth2"
 )
+
+type athlete struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"firstname"`
+	LastName  string `json:"lastname"`
+}
 
 // Callback handles the redirect from Strava after the user approved or
 // declined the login. It rejects the request unless the state matches the
@@ -33,8 +45,8 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
-
-	if r.URL.Query().Get("code") == "" {
+	code := r.URL.Query().Get("code")
+	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)
 		return
 	}
@@ -51,5 +63,43 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, h.client)
+	token, err := h.oauthCfg.Exchange(ctx, code)
+	if err != nil {
+		h.logger.Error("token exchange error", "error", err)
+		http.Error(w, "could not complete login with Strava", http.StatusBadGateway)
+		return
+	}
+
+	raw, err := json.Marshal(token.Extra("athlete"))
+	if err != nil {
+		h.logger.Error("encode athlete", "error", err)
+		http.Error(w, "unexpected response from Strava", http.StatusBadGateway)
+		return
+	}
+	var a athlete
+	if err := json.Unmarshal(raw, &a); err != nil || a.ID == 0 {
+		h.logger.Error("invalid athlete in token response", "error", err)
+		http.Error(w, "unexpected response from Strava", http.StatusBadGateway)
+		return
+	}
+
+	u, err := h.userStore.Upsert(r.Context(), store.User{
+		StravaID:       a.ID,
+		FirstName:      a.FirstName,
+		LastName:       a.LastName,
+		AccessToken:    token.AccessToken,
+		RefreshToken:   token.RefreshToken,
+		TokenExpiresAt: token.Expiry,
+	})
+	if err != nil {
+		h.logger.Error("upsert user failed", "error", err)
+		http.Error(w, "could not save user", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("user logged in", "strava_id", u.StravaID)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = fmt.Fprintf(w, "Logged in as %s %s\n", u.FirstName, u.LastName)
 }
