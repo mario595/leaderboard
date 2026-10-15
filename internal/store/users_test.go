@@ -29,8 +29,28 @@ func TestRoundtrip(t *testing.T) {
 		t.Fatalf("testRoundtrip getByStravaID: %v", err)
 	}
 
-	if result.ID == 0 {
+	id := result.ID
+
+	if id == 0 {
 		t.Errorf("ID should not be 0")
+	}
+
+	assertEqual(t, "StravaID", u.StravaID, result.StravaID)
+	assertEqual(t, "FirstName", u.FirstName, result.FirstName)
+	assertEqual(t, "LastName", u.LastName, result.LastName)
+	assertEqual(t, "AccessToken", u.AccessToken, result.AccessToken)
+	assertEqual(t, "RefreshToken", u.RefreshToken, result.RefreshToken)
+	assertTime(t, "TokenExpiresAt", u.TokenExpiresAt, result.TokenExpiresAt)
+	assertTime(t, "CreatedAt", fixed, result.CreatedAt)
+	assertTime(t, "UpdatedAt", fixed, result.UpdatedAt)
+
+	result, err = s.GetByID(t.Context(), id)
+	if err != nil {
+		t.Fatalf("testRoundtrip getByID: %v", err)
+	}
+
+	if result.ID != id {
+		t.Errorf("ID should be %d", id)
 	}
 
 	assertEqual(t, "StravaID", u.StravaID, result.StravaID)
@@ -81,9 +101,17 @@ func TestUpsertUpdatesNotDuplicates(t *testing.T) {
 	assertTime(t, "UpdatedAt", result.UpdatedAt, t1)
 }
 
-func TestNotFound(t *testing.T) {
+func TestGetByStravaID_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.GetByStravaID(t.Context(), 123)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("Unexpected error. Got %v, expected ErrNotFound", err)
+	}
+}
+
+func TestGetByID_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	_, err := s.GetByID(t.Context(), 123)
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("Unexpected error. Got %v, expected ErrNotFound", err)
 	}

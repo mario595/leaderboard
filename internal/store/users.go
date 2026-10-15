@@ -29,6 +29,12 @@ const getByStravaIDQuery = `
 	WHERE strava_id = ?;
 `
 
+const getByIDQuery = `
+	SELECT id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at
+	FROM users
+	WHERE id = ?;
+`
+
 // User is a Strava user
 type User struct {
 	ID             int64
@@ -91,6 +97,19 @@ func (s *UserStore) GetByStravaID(ctx context.Context, stravaID int64) (User, er
 		return User{}, fmt.Errorf("get user by strava id: %w", err)
 	}
 
+	return user, nil
+}
+
+func (s *UserStore) GetByID(ctx context.Context, id int64) (User, error) {
+	r := s.db.QueryRowContext(ctx, getByIDQuery, id)
+	user, err := scanRow(r)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return User{}, fmt.Errorf("get user by id: %w", err)
+	}
 	return user, nil
 }
 

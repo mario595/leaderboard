@@ -18,12 +18,8 @@ func TestSessionManager(t *testing.T) {
 	if len(r.cookies) != 1 {
 		t.Fatalf("Unexpected number of cookies: got %d, wanted 1", len(r.cookies))
 	}
-	var cookie *http.Cookie
-	for _, c := range r.cookies {
-		if c.Name == "session" {
-			cookie = c
-		}
-	}
+	cookie := sessionCookie(t, r)
+
 	if cookie == nil {
 		t.Fatal("no cookie named session in the response")
 	}
@@ -36,7 +32,7 @@ func TestSessionManager(t *testing.T) {
 	r = do(t, h, "/get", cookie)
 
 	if r.status != http.StatusOK {
-		t.Fatalf("Unexepected status: got %d, wanted %d", r.status, http.StatusOK)
+		t.Fatalf("Unexpected status: got %d, wanted %d", r.status, http.StatusOK)
 	}
 	if len(r.cookies) != 0 {
 		t.Fatalf("Unexpected number of cookies: got %d, wanted 0", len(r.cookies))
