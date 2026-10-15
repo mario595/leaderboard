@@ -206,7 +206,7 @@ func TestCallbackHappyPath(t *testing.T) {
 	testutil.AssertEqual(t, "client_secret", "test-secret", fs.form.Get("client_secret"))
 
 	who := h.sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, h.sessions.GetInt64(r.Context(), "userID"))
+		_, _ = fmt.Fprint(w, h.sessions.GetInt64(r.Context(), SessionUserIDKey))
 	}))
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)

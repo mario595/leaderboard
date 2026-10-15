@@ -2,14 +2,20 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/mario595/leaderboard/internal/auth"
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 func TestMiddleware(t *testing.T) {
@@ -98,4 +104,152 @@ func decodeLogLine(t *testing.T, buf *bytes.Buffer) map[string]any {
 		t.Fatalf("Error unmarshalling output, %v", err)
 	}
 	return out
+}
+
+// authApp is a small app built to test requireAuth: routes that create
+// different kinds of sessions, and a protected route behind the middleware.
+type authApp struct {
+	handler         http.Handler
+	protectedCalled bool
+}
+
+// newAuthApp builds the app with a real session manager (in-memory store).
+//
+//	/login      creates a session of a logged-in user (id 42)
+//	/other      creates a session that holds something else
+//	/protected  is behind requireAuth and writes the id it receives
+func newAuthApp(t *testing.T) *authApp {
+	t.Helper()
+
+	logger := slog.New(slog.DiscardHandler)
+	sessions := scs.New()
+	app := &authApp{}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		sessions.Put(r.Context(), auth.SessionUserIDKey, int64(42))
+	})
+	mux.HandleFunc("GET /other", func(w http.ResponseWriter, r *http.Request) {
+		sessions.Put(r.Context(), "something", "else")
+	})
+	protected := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app.protectedCalled = true
+		id, ok := userIDFromContext(r.Context())
+		_, _ = fmt.Fprintf(w, "%d %t", id, ok)
+	})
+	mux.Handle("GET /protected", requireAuth(sessions, logger)(protected))
+
+	app.handler = sessions.LoadAndSave(mux)
+	return app
+}
+
+// do sends a request to the app and returns what the tests look at.
+func (a *authApp) do(t *testing.T, path string, cookies ...*http.Cookie) (status int, body string, header http.Header, set []*http.Cookie) {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	a.handler.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer func() { _ = res.Body.Close() }()
+	return res.StatusCode, rec.Body.String(), res.Header, res.Cookies()
+}
+
+// sessionCookie returns the session cookie a request obtained, or fails.
+func sessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
+	t.Helper()
+
+	for _, c := range cookies {
+		if c.Name == "session" {
+			return c
+		}
+	}
+	t.Fatal("no session cookie in the response")
+	return nil
+}
+
+func TestRequireAuth_withoutSession(t *testing.T) {
+	app := newAuthApp(t)
+
+	status, body, header, _ := app.do(t, "/protected")
+
+	testutil.AssertEqual(t, "status", http.StatusUnauthorized, status)
+	testutil.AssertEqual(t, "Content-Type", "application/json", header.Get("Content-Type"))
+
+	var got map[string]string
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("body %q is not JSON: %v", body, err)
+	}
+	testutil.AssertEqual(t, "error message", "unauthorized", got["error"])
+
+	if app.protectedCalled {
+		t.Error("the protected handler ran for a request without a session")
+	}
+}
+
+func TestRequireAuth_unknownSessionToken(t *testing.T) {
+	app := newAuthApp(t)
+
+	status, _, _, _ := app.do(t, "/protected", &http.Cookie{Name: "session", Value: "not-a-real-token"})
+
+	testutil.AssertEqual(t, "status", http.StatusUnauthorized, status)
+	if app.protectedCalled {
+		t.Error("the protected handler ran for an unknown session token")
+	}
+}
+
+func TestRequireAuth_sessionWithoutUser(t *testing.T) {
+	app := newAuthApp(t)
+	_, _, _, set := app.do(t, "/other")
+
+	status, _, _, _ := app.do(t, "/protected", sessionCookie(t, set))
+
+	testutil.AssertEqual(t, "status", http.StatusUnauthorized, status)
+	if app.protectedCalled {
+		t.Error("the protected handler ran for a session without a user")
+	}
+}
+
+func TestRequireAuth_loggedInUser(t *testing.T) {
+	app := newAuthApp(t)
+	_, _, _, set := app.do(t, "/login")
+
+	status, body, _, _ := app.do(t, "/protected", sessionCookie(t, set))
+
+	testutil.AssertEqual(t, "status", http.StatusOK, status)
+	// The handler received the id through the request context.
+	testutil.AssertEqual(t, "id and ok seen by the handler", "42 true", body)
+	if !app.protectedCalled {
+		t.Error("the protected handler did not run for a logged-in user")
+	}
+}
+
+func TestUserIDFromContext(t *testing.T) {
+	// A key of another type, even with the same underlying shape, is a different key.
+	type otherKey struct{}
+
+	testCases := []struct {
+		name   string
+		ctx    context.Context
+		wantID int64
+		wantOK bool
+	}{
+		{name: "not set", ctx: context.Background()},
+		{name: "set", ctx: context.WithValue(context.Background(), userIDKey{}, int64(7)), wantID: 7, wantOK: true},
+		{name: "wrong type", ctx: context.WithValue(context.Background(), userIDKey{}, "7")},
+		{name: "same value under another key", ctx: context.WithValue(context.Background(), otherKey{}, int64(7))},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			id, ok := userIDFromContext(tc.ctx)
+
+			testutil.AssertEqual(t, "id", tc.wantID, id)
+			testutil.AssertEqual(t, "ok", tc.wantOK, ok)
+		})
+	}
 }

@@ -20,6 +20,10 @@ type athlete struct {
 
 const redirectTo = "/api/me"
 
+// SessionUserIDKey is the session key under which the id of the logged-in user
+// is kept. Callback writes it, and the httpapi middleware reads it.
+const SessionUserIDKey = "UserID"
+
 // Callback handles the redirect from Strava after the user approved or
 // declined the login. It rejects the request unless the state matches the
 // cookie set by Login, the authorization code is present, and the user granted
@@ -99,7 +103,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.sessions.Put(r.Context(), "userID", u.ID)
+	h.sessions.Put(r.Context(), SessionUserIDKey, u.ID)
 	if err := h.sessions.RenewToken(r.Context()); err != nil {
 		h.logger.Error("cannot login", "error", err)
 		http.Error(w, "cannot login", http.StatusInternalServerError)
