@@ -100,6 +100,7 @@ func (s *UserStore) GetByStravaID(ctx context.Context, stravaID int64) (User, er
 	return user, nil
 }
 
+// GetByID returns the user with the given internal id, or ErrNotFound.
 func (s *UserStore) GetByID(ctx context.Context, id int64) (User, error) {
 	r := s.db.QueryRowContext(ctx, getByIDQuery, id)
 	user, err := scanRow(r)

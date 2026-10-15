@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mario595/leaderboard/internal/store"
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 type fakeStrava struct {
@@ -138,8 +139,8 @@ func TestCallback_exchangeFailures(t *testing.T) {
 
 			h.Callback(rec, validCallbackRequest(t))
 
-			assertEqual(t, "status", tc.wantStatus, rec.Code)
-			assertEqual(t, "store calls", tc.wantStoreCall, users.calls)
+			testutil.AssertEqual(t, "status", tc.wantStatus, rec.Code)
+			testutil.AssertEqual(t, "store calls", tc.wantStoreCall, users.calls)
 
 			// Nothing sensitive or internal may leak into the response.
 			body := rec.Body.String()
@@ -176,8 +177,8 @@ func TestCallback_stravaTimeout(t *testing.T) {
 	h.Callback(rec, validCallbackRequest(t))
 	elapsed := time.Since(start)
 
-	assertEqual(t, "status", http.StatusBadGateway, rec.Code)
-	assertEqual(t, "store calls", 0, users.calls)
+	testutil.AssertEqual(t, "status", http.StatusBadGateway, rec.Code)
+	testutil.AssertEqual(t, "store calls", 0, users.calls)
 	if elapsed > 2*time.Second {
 		t.Errorf("handler took %v, want it to give up after the client timeout (50ms)", elapsed)
 	}

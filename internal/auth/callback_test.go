@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 func TestCallbackValidations(t *testing.T) {
@@ -173,18 +175,18 @@ func TestCallbackHappyPath(t *testing.T) {
 		t.Errorf("body = %q, want it to mention Ada", body)
 	}
 
-	assertEqual(t, "upsert calls", 1, users.calls)
-	assertEqual(t, "StravaID", int64(4242), users.got.StravaID)
-	assertEqual(t, "First Name", "Ada", users.got.FirstName)
-	assertEqual(t, "Last Name", "Lovelace", users.got.LastName)
-	assertEqual(t, "Access Token", "AT", users.got.AccessToken)
-	assertEqual(t, "Refresh Token", "RT", users.got.RefreshToken)
+	testutil.AssertEqual(t, "upsert calls", 1, users.calls)
+	testutil.AssertEqual(t, "StravaID", int64(4242), users.got.StravaID)
+	testutil.AssertEqual(t, "First Name", "Ada", users.got.FirstName)
+	testutil.AssertEqual(t, "Last Name", "Lovelace", users.got.LastName)
+	testutil.AssertEqual(t, "Access Token", "AT", users.got.AccessToken)
+	testutil.AssertEqual(t, "Refresh Token", "RT", users.got.RefreshToken)
 	if !users.got.TokenExpiresAt.After(time.Now().Add(5 * time.Hour)) {
 		t.Errorf("Incorrect exipresAt")
 	}
 
-	assertEqual(t, "code", "x", fs.form.Get("code"))
-	assertEqual(t, "code", "authorization_code", fs.form.Get("grant_type"))
-	assertEqual(t, "client_id", "test-id", fs.form.Get("client_id"))
-	assertEqual(t, "client_secret", "test-secret", fs.form.Get("client_secret"))
+	testutil.AssertEqual(t, "code", "x", fs.form.Get("code"))
+	testutil.AssertEqual(t, "code", "authorization_code", fs.form.Get("grant_type"))
+	testutil.AssertEqual(t, "client_id", "test-id", fs.form.Get("client_id"))
+	testutil.AssertEqual(t, "client_secret", "test-secret", fs.form.Get("client_secret"))
 }

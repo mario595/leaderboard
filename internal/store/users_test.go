@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 func TestRoundtrip(t *testing.T) {
@@ -35,14 +37,14 @@ func TestRoundtrip(t *testing.T) {
 		t.Errorf("ID should not be 0")
 	}
 
-	assertEqual(t, "StravaID", u.StravaID, result.StravaID)
-	assertEqual(t, "FirstName", u.FirstName, result.FirstName)
-	assertEqual(t, "LastName", u.LastName, result.LastName)
-	assertEqual(t, "AccessToken", u.AccessToken, result.AccessToken)
-	assertEqual(t, "RefreshToken", u.RefreshToken, result.RefreshToken)
-	assertTime(t, "TokenExpiresAt", u.TokenExpiresAt, result.TokenExpiresAt)
-	assertTime(t, "CreatedAt", fixed, result.CreatedAt)
-	assertTime(t, "UpdatedAt", fixed, result.UpdatedAt)
+	testutil.AssertEqual(t, "StravaID", u.StravaID, result.StravaID)
+	testutil.AssertEqual(t, "FirstName", u.FirstName, result.FirstName)
+	testutil.AssertEqual(t, "LastName", u.LastName, result.LastName)
+	testutil.AssertEqual(t, "AccessToken", u.AccessToken, result.AccessToken)
+	testutil.AssertEqual(t, "RefreshToken", u.RefreshToken, result.RefreshToken)
+	testutil.AssertTime(t, "TokenExpiresAt", u.TokenExpiresAt, result.TokenExpiresAt)
+	testutil.AssertTime(t, "CreatedAt", fixed, result.CreatedAt)
+	testutil.AssertTime(t, "UpdatedAt", fixed, result.UpdatedAt)
 
 	result, err = s.GetByID(t.Context(), id)
 	if err != nil {
@@ -53,14 +55,14 @@ func TestRoundtrip(t *testing.T) {
 		t.Errorf("ID should be %d", id)
 	}
 
-	assertEqual(t, "StravaID", u.StravaID, result.StravaID)
-	assertEqual(t, "FirstName", u.FirstName, result.FirstName)
-	assertEqual(t, "LastName", u.LastName, result.LastName)
-	assertEqual(t, "AccessToken", u.AccessToken, result.AccessToken)
-	assertEqual(t, "RefreshToken", u.RefreshToken, result.RefreshToken)
-	assertTime(t, "TokenExpiresAt", u.TokenExpiresAt, result.TokenExpiresAt)
-	assertTime(t, "CreatedAt", fixed, result.CreatedAt)
-	assertTime(t, "UpdatedAt", fixed, result.UpdatedAt)
+	testutil.AssertEqual(t, "StravaID", u.StravaID, result.StravaID)
+	testutil.AssertEqual(t, "FirstName", u.FirstName, result.FirstName)
+	testutil.AssertEqual(t, "LastName", u.LastName, result.LastName)
+	testutil.AssertEqual(t, "AccessToken", u.AccessToken, result.AccessToken)
+	testutil.AssertEqual(t, "RefreshToken", u.RefreshToken, result.RefreshToken)
+	testutil.AssertTime(t, "TokenExpiresAt", u.TokenExpiresAt, result.TokenExpiresAt)
+	testutil.AssertTime(t, "CreatedAt", fixed, result.CreatedAt)
+	testutil.AssertTime(t, "UpdatedAt", fixed, result.UpdatedAt)
 }
 
 func TestUpsertUpdatesNotDuplicates(t *testing.T) {
@@ -94,11 +96,11 @@ func TestUpsertUpdatesNotDuplicates(t *testing.T) {
 		t.Fatalf("testRoundtrip getByStravaID: %v", err)
 	}
 
-	assertEqual(t, "ID", insertedUser.ID, result.ID)
-	assertEqual(t, "FirstName", "Anakin", result.FirstName)
-	assertEqual(t, "AccessToken", "secondAccessToken123", result.AccessToken)
-	assertTime(t, "CreatedAt", t0, result.CreatedAt)
-	assertTime(t, "UpdatedAt", result.UpdatedAt, t1)
+	testutil.AssertEqual(t, "ID", insertedUser.ID, result.ID)
+	testutil.AssertEqual(t, "FirstName", "Anakin", result.FirstName)
+	testutil.AssertEqual(t, "AccessToken", "secondAccessToken123", result.AccessToken)
+	testutil.AssertTime(t, "CreatedAt", t0, result.CreatedAt)
+	testutil.AssertTime(t, "UpdatedAt", result.UpdatedAt, t1)
 }
 
 func TestGetByStravaID_NotFound(t *testing.T) {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 func TestSessionManager(t *testing.T) {
@@ -24,10 +26,10 @@ func TestSessionManager(t *testing.T) {
 		t.Fatal("no cookie named session in the response")
 	}
 
-	assertEqual(t, "cookie.HttpOnly", true, cookie.HttpOnly)
-	assertEqual(t, "cookie.SameSite", http.SameSiteLaxMode, cookie.SameSite)
-	assertEqual(t, "cookie.Secure", false, cookie.Secure)
-	assertEqual(t, "cookie.Path", "/", cookie.Path)
+	testutil.AssertEqual(t, "cookie.HttpOnly", true, cookie.HttpOnly)
+	testutil.AssertEqual(t, "cookie.SameSite", http.SameSiteLaxMode, cookie.SameSite)
+	testutil.AssertEqual(t, "cookie.Secure", false, cookie.Secure)
+	testutil.AssertEqual(t, "cookie.Path", "/", cookie.Path)
 
 	r = do(t, h, "/get", cookie)
 
@@ -38,7 +40,7 @@ func TestSessionManager(t *testing.T) {
 		t.Fatalf("Unexpected number of cookies: got %d, wanted 0", len(r.cookies))
 	}
 
-	assertEqual(t, "body", "v", r.body)
+	testutil.AssertEqual(t, "body", "v", r.body)
 }
 
 // newSessionApp builds a tiny app on top of a session manager: /put stores a
@@ -78,7 +80,7 @@ func TestSessionManager_secureCookie(t *testing.T) {
 
 	cookie := sessionCookie(t, do(t, app, "/put"))
 
-	assertEqual(t, "cookie.Secure", true, cookie.Secure)
+	testutil.AssertEqual(t, "cookie.Secure", true, cookie.Secure)
 }
 
 func TestSessionManager_noValidSession(t *testing.T) {
@@ -96,9 +98,9 @@ func TestSessionManager_noValidSession(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := do(t, app, "/get", tc.cookies...)
 
-			assertEqual(t, "status", http.StatusOK, r.status)
-			assertEqual(t, "body", "", r.body)
-			assertEqual(t, "number of cookies", 0, len(r.cookies))
+			testutil.AssertEqual(t, "status", http.StatusOK, r.status)
+			testutil.AssertEqual(t, "body", "", r.body)
+			testutil.AssertEqual(t, "number of cookies", 0, len(r.cookies))
 		})
 	}
 }
@@ -115,5 +117,5 @@ func TestSessionManager_sharedDatabase(t *testing.T) {
 
 	r := do(t, serverB, "/get", cookie)
 
-	assertEqual(t, "body served by the other server", "v", r.body)
+	testutil.AssertEqual(t, "body served by the other server", "v", r.body)
 }
