@@ -21,7 +21,7 @@ import (
 func TestMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	normalRouter := NewRouter(logger, nil)
+	normalRouter := NewRouter(Deps{Logger: logger, Sessions: scs.New()})
 
 	panicRouter := chi.NewRouter()
 	panicRouter.Use(middleware.RequestID)

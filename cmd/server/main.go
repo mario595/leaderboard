@@ -88,7 +88,7 @@ func runServer() error {
 	defer stop()
 	authHandler := auth.New(oauthCfg, userStore, sessions, logger, httpClient, secureCookies)
 
-	router := httpapi.NewRouter(logger, authHandler)
+	router := httpapi.NewRouter(httpapi.Deps{Logger: logger, Auth: authHandler, Sessions: sessions})
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

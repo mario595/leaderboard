@@ -14,11 +14,12 @@ import (
 // handler is given, and absent when it is nil.
 func TestRouter_authRoutes(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
+	sessions := scs.New()
 	// The user store is not needed for these requests: login only redirects, and
 	// a callback without state is rejected before anything is saved.
 	authHandler := auth.New(
 		auth.NewOauthConfig("test-id", "test-secret", "http://localhost:8080"),
-		nil, scs.New(), logger, http.DefaultClient, false,
+		nil, sessions, logger, http.DefaultClient, false,
 	)
 
 	tests := []struct {
@@ -52,6 +53,20 @@ func TestRouter_authRoutes(t *testing.T) {
 			wantStatus: http.StatusMethodNotAllowed,
 		},
 		{
+			name:       "logout only accepts POST",
+			handler:    authHandler,
+			method:     http.MethodGet,
+			path:       "/auth/logout",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "logout",
+			handler:    authHandler,
+			method:     http.MethodPost,
+			path:       "/auth/logout",
+			wantStatus: http.StatusNoContent,
+		},
+		{
 			name:       "no auth routes without an auth handler",
 			handler:    nil,
 			method:     http.MethodGet,
@@ -62,7 +77,11 @@ func TestRouter_authRoutes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			router := NewRouter(logger, tc.handler)
+			router := NewRouter(Deps{
+				Logger:   logger,
+				Auth:     tc.handler,
+				Sessions: sessions,
+			})
 			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
 			rec := httptest.NewRecorder()
 
@@ -116,7 +135,7 @@ func TestRouter(t *testing.T) {
 	}
 
 	logger := slog.New(slog.DiscardHandler)
-	router := NewRouter(logger, nil)
+	router := NewRouter(Deps{Logger: logger, Sessions: scs.New()})
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 
