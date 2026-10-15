@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/auth"
 )
 
@@ -17,7 +18,7 @@ func TestRouter_authRoutes(t *testing.T) {
 	// a callback without state is rejected before anything is saved.
 	authHandler := auth.New(
 		auth.NewOauthConfig("test-id", "test-secret", "http://localhost:8080"),
-		nil, logger, http.DefaultClient, false,
+		nil, scs.New(), logger, http.DefaultClient, false,
 	)
 
 	tests := []struct {

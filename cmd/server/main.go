@@ -84,7 +84,9 @@ func runServer() error {
 	userStore := store.NewUserStore(db)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	secureCookies := cfg.Env == "prod"
-	authHandler := auth.New(oauthCfg, userStore, logger, httpClient, secureCookies)
+	sessions, stop := auth.NewSessionManager(db, secureCookies)
+	defer stop()
+	authHandler := auth.New(oauthCfg, userStore, sessions, logger, httpClient, secureCookies)
 
 	router := httpapi.NewRouter(logger, authHandler)
 

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/store"
 
 	"golang.org/x/oauth2"
@@ -27,17 +28,19 @@ type Handler struct {
 	logger        *slog.Logger
 	client        *http.Client
 	secureCookies bool
+	sessions      *scs.SessionManager
 }
 
 // New returns a Handler. The client is used for the token exchange with Strava
 // and should have a timeout. Set secureCookies to true when serving over HTTPS.
-func New(cfg *oauth2.Config, us UserStore, logger *slog.Logger, client *http.Client, secureCookies bool) *Handler {
+func New(cfg *oauth2.Config, us UserStore, sessions *scs.SessionManager, logger *slog.Logger, client *http.Client, secureCookies bool) *Handler {
 	return &Handler{
 		oauthCfg:      cfg,
 		userStore:     us,
 		logger:        logger,
 		client:        client,
 		secureCookies: secureCookies,
+		sessions:      sessions,
 	}
 }
 

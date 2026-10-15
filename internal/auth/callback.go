@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -18,6 +17,8 @@ type athlete struct {
 	FirstName string `json:"firstname"`
 	LastName  string `json:"lastname"`
 }
+
+const redirectTo = "/api/me"
 
 // Callback handles the redirect from Strava after the user approved or
 // declined the login. It rejects the request unless the state matches the
@@ -98,8 +99,14 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.sessions.Put(r.Context(), "userID", u.ID)
+	if err := h.sessions.RenewToken(r.Context()); err != nil {
+		h.logger.Error("cannot login", "error", err)
+		http.Error(w, "cannot login", http.StatusInternalServerError)
+		return
+	}
+
 	h.logger.Info("user logged in", "strava_id", u.StravaID)
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = fmt.Fprintf(w, "Logged in as %s %s\n", u.FirstName, u.LastName)
+	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 }
