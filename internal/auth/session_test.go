@@ -8,18 +8,8 @@ import (
 )
 
 func TestSessionManager(t *testing.T) {
-	sm, stop := NewSessionManager(newTestDB(t), false)
-	t.Cleanup(stop)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /put", func(w http.ResponseWriter, r *http.Request) {
-		sm.Put(r.Context(), "k", "v")
-	})
-	mux.HandleFunc("GET /get", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, sm.GetString(r.Context(), "k"))
-	})
-	h := sm.LoadAndSave(mux)
-
+	h := newSessionApp(t, newTestDB(t), false)
 	r := do(t, h, "/put")
 
 	if r.status != http.StatusOK {
