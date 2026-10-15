@@ -22,6 +22,7 @@ func TestMigrate(t *testing.T) {
 
 	assertTableExists(t, db, "users")
 	assertTableExists(t, db, "seasons")
+	assertTableExists(t, db, "sessions")
 
 	// Run a second time. Should not fail (idempotency).
 	if err := Migrate(t.Context(), db); err != nil {

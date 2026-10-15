@@ -28,7 +28,6 @@ func newTestDB(t *testing.T) *sql.DB {
 	}
 
 	return db
-
 }
 
 func assertTime(t *testing.T, propertyName string, wanted, got time.Time) {
