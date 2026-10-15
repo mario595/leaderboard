@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,86 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/auth"
+	"github.com/mario595/leaderboard/internal/store"
+	"github.com/mario595/leaderboard/internal/testutil"
 )
+
+// newAPIApp builds the real router with a fake user store, plus a test-only
+// route, /test-login, that creates a session for user 42. The router has no
+// route that logs a user in without Strava, so the test creates the session
+// through the same session manager the router uses.
+func newAPIApp(t *testing.T, users userGetter) *authApp {
+	t.Helper()
+
+	sessions := scs.New()
+	router := NewRouter(Deps{
+		Logger:   slog.New(slog.DiscardHandler),
+		Sessions: sessions,
+		Users:    users,
+	})
+
+	outer := http.NewServeMux()
+	outer.Handle("GET /test-login", sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessions.Put(r.Context(), auth.SessionUserIDKey, int64(42))
+	})))
+	outer.Handle("/", router)
+	return &authApp{handler: outer}
+}
+
+func TestRouter_apiRequiresLogin(t *testing.T) {
+	app := newAPIApp(t, &fakeUserStore{})
+
+	testCases := []struct {
+		name       string
+		path       string
+		wantStatus int
+	}{
+		{name: "me without a session", path: "/api/me", wantStatus: http.StatusUnauthorized},
+		// The middleware of a sub-router runs before routing, so an anonymous
+		// visitor cannot find out which API paths exist.
+		{name: "unknown API path without a session", path: "/api/nothing-here", wantStatus: http.StatusUnauthorized},
+		{name: "health stays public", path: "/healthz", wantStatus: http.StatusOK},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			status, _, _, _ := app.do(t, tc.path)
+
+			testutil.AssertEqual(t, "status", tc.wantStatus, status)
+		})
+	}
+}
+
+func TestRouter_apiMeForALoggedInUser(t *testing.T) {
+	users := &fakeUserStore{user: store.User{
+		ID: 42, StravaID: 4242, FirstName: "Ada", LastName: "Lovelace",
+		AccessToken: "accessToken", RefreshToken: "refreshToken",
+	}}
+	app := newAPIApp(t, users)
+	_, _, _, set := app.do(t, "/test-login")
+	cookie := sessionCookie(t, set)
+
+	status, body, _, _ := app.do(t, "/api/me", cookie)
+
+	testutil.AssertEqual(t, "status", http.StatusOK, status)
+	var got map[string]any
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("body %q is not JSON: %v", body, err)
+	}
+	testutil.AssertEqual[any](t, "firstName", "Ada", got["firstName"])
+
+	// Logged in, an unknown API path is a plain 404.
+	status, _, _, _ = app.do(t, "/api/nothing-here", cookie)
+	testutil.AssertEqual(t, "status of an unknown API path", http.StatusNotFound, status)
+}
+
+func TestRouter_noAPIWithoutUserStore(t *testing.T) {
+	app := newAPIApp(t, nil)
+
+	status, _, _, _ := app.do(t, "/api/me")
+
+	testutil.AssertEqual(t, "status", http.StatusNotFound, status)
+}
 
 // TestRouter_authRoutes checks that the login routes are registered when an auth
 // handler is given, and absent when it is nil.
