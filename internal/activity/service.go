@@ -1,3 +1,10 @@
+// Package activity stores Strava activities and keeps their points up to
+// date. Every change goes through Service, which writes the activity and
+// recomputes the points of each affected day (see scoring.Score) in one
+// transaction, so stored points always match the stored activities.
+//
+// Callers are the webhook worker and the reconcile job. Both may repeat an
+// operation: Save and Delete are idempotent.
 package activity
 
 import (
@@ -10,7 +17,9 @@ import (
 	"github.com/mario595/leaderboard/internal/store"
 )
 
-// Service for Activity operations.
+// Service saves and deletes activities, recomputing points per user and day.
+// It is safe for concurrent use: each call runs in its own transaction, and
+// the database allows one connection at a time.
 type Service struct {
 	db         *sql.DB
 	activities *store.ActivityStore
@@ -84,14 +93,16 @@ func (s *Service) Delete(ctx context.Context, stravaID int64) error {
 		return fmt.Errorf("delete activity %d: %w", stravaID, err)
 	}
 
-	if found {
-		if err := q.Delete(ctx, stravaID); err != nil {
-			return fmt.Errorf("delete activity %d: %w", stravaID, err)
-		}
+	if !found {
+		return nil
+	}
 
-		if err := recomputeDay(ctx, q, a.UserID, a.Day()); err != nil {
-			return fmt.Errorf("delete activity %d: %w", stravaID, err)
-		}
+	if err := q.Delete(ctx, stravaID); err != nil {
+		return fmt.Errorf("delete activity %d: %w", stravaID, err)
+	}
+
+	if err := recomputeDay(ctx, q, a.UserID, a.Day()); err != nil {
+		return fmt.Errorf("delete activity %d: %w", stravaID, err)
 	}
 
 	err = tx.Commit()
