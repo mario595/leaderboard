@@ -77,8 +77,8 @@ Leaderboard for a training group, powered by the Strava API.
 ## Project state
 - GitHub repo: mario595/leaderboard (private). Project: https://github.com/users/mario595/projects/6
 - Tickets: issues #1-#24 and #31 created, grouped in milestones M0-M8 (M0 Setup, M1 Persistence, M2 Auth, M3 Scoring, M4 Strava client, M5 Webhooks, M6 API, M7 Frontend, M8 Backfill and deploy). Issue number order = suggested implementation order, except #31 (reconcile job) which goes right after #22. (#25-#30 are PRs.)
-- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton), #4 (CI), #5 (SQLite, migrations, user store), #6 (seasons: table, store, `server season create|list` CLI), #7 (Strava OAuth login and callback), #8 (sessions, logout, auth middleware, /api/me), #9 (scoring domain: `internal/scoring`; PR pending).
-- Next: #10 (activities table and store, per-day recompute service).
+- Done: #1 (Strava app registered, single-player mode), #2 (Go + VS Code), #3 (skeleton), #4 (CI), #5 (SQLite, migrations, user store), #6 (seasons: table, store, `server season create|list` CLI), #7 (Strava OAuth login and callback), #8 (sessions, logout, auth middleware, /api/me), #9 (scoring domain: `internal/scoring`).
+- In progress: #10 (activities table and store, per-day recompute service), branch `feature/10-activities-store`.
 - Layout so far: `cmd/server/main.go`, `internal/config`, `internal/logging`, `internal/httpapi` (router, health, JSON helpers, middleware, /api/me), `internal/auth` (Strava OAuth, sessions, logout), `internal/testutil` (shared test assertions), `internal/scoring` (pure point rules: Discipline, Activity, Score), `internal/store` (db, migrate, embedded SQL migrations, users, seasons), `README.md`, `Makefile`, `.golangci.yml`, `.github/workflows/ci.yml`, `.vscode/launch.json`.
 - Local setup notes: Go 1.27.1 in `/usr/local/go`; `gcc` not installed yet, so `go test -race` does not work (needs cgo): `sudo apt install build-essential` before #14. `.env` holds `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` (git-ignored; `.env.example` lists names). Never read or print `.env`.
 
