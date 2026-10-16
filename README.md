@@ -11,20 +11,21 @@ Work in progress. What exists today:
 - Sign in with Strava (OAuth), which creates or updates the user and stores the tokens
 - Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
 - A season model (a named range of dates) with a CLI to create and list seasons
+- The scoring rules below, as a tested Go package (`internal/scoring`); not yet applied to real activities
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: receiving Strava activity events, the scoring engine, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: receiving Strava activity events and storing their points, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
-The rules the scoring engine will implement:
+The rules, implemented in `internal/scoring`:
 
 - Counted activity types: runs (including trail and virtual), rides (including mountain bike, gravel and virtual), and swims. E-bikes are excluded.
 - An activity must have at least **30 minutes of moving time**.
 - Each activity is worth **2 points**, or **4 points** if it is a competition (a Strava "Race" workout type, or `#competition` in the activity description).
-- At most **2 activities per user per day** score, the ones with the most points. The day is the activity's local start date.
+- At most **2 activities per user per day** score, the ones with the most points; on a tie, the one that started first. The day is the activity's local start date.
 - Only activities inside the current **season** count.
 
 ## Requirements

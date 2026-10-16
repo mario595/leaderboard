@@ -97,6 +97,9 @@ func TestActivityIsCompetition(t *testing.T) {
 		{name: "word without hash", sportType: "Run", description: "competition", want: false},
 		{name: "tag glued to a word", sportType: "Run", description: "x#competition", want: false},
 		{name: "empty description", sportType: "Run", description: "", want: false},
+
+		// Sports that do not count are never competitions, even with the tag.
+		{name: "walk with tag", sportType: "Walk", description: "#competition", want: false},
 	}
 
 	for _, tc := range testCases {
