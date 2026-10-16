@@ -93,6 +93,24 @@ const getActivityQuery = `
 	WHERE strava_id = ?;
 `
 
+const listDayQuery = `
+	SELECT strava_id, user_id, sport_type, start_local, moving_time, distance, workout_type, description, points, created_at, updated_at
+	FROM activities
+	WHERE user_id = ? AND day = ?
+	ORDER BY start_local, strava_id;
+`
+
+const setPointsQuery = `
+	UPDATE activities
+	SET points = ?
+	WHERE strava_id = ?;
+`
+
+const deleteActivityQuery = `
+	DELETE FROM activities
+	WHERE strava_id = ?;
+`
+
 // Upsert inserts a, or updates the stored activity with the same StravaID,
 // and returns the stored row. a.Points and a.CreatedAt are ignored: a new
 // activity starts with 0 points, and an update keeps the stored points,
@@ -134,6 +152,53 @@ func (s *ActivityStore) Get(ctx context.Context, stravaID int64) (Activity, erro
 		return Activity{}, fmt.Errorf("get activity %d: %w", stravaID, err)
 	}
 	return activity, nil
+}
+
+// ListDay returns the user's activities on that day,
+// ordered by start time then Strava ID. Empty slice if there are none.
+func (s *ActivityStore) ListDay(ctx context.Context, userID int64, day string) ([]Activity, error) {
+	result := []Activity{}
+	rows, err := s.db.QueryContext(ctx, listDayQuery, userID, day)
+	if err != nil {
+		return nil, fmt.Errorf("list day %q for user %d: %w", day, userID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		a, err := scanActivityRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list day %q for user %d: %w", day, userID, err)
+		}
+		result = append(result, a)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list day %q for user %d: %w", day, userID, err)
+	}
+
+	return result, nil
+}
+
+// SetPoints sets the points in a Strava Activity with stravaID without updating UpdatedAt.
+// If the activity doesn't exist, this function does not return an error.
+func (s *ActivityStore) SetPoints(ctx context.Context, stravaID int64, points int) error {
+	_, err := s.db.ExecContext(ctx, setPointsQuery, points, stravaID)
+	if err != nil {
+		return fmt.Errorf("set points for activity %d: %w", stravaID, err)
+	}
+
+	return nil
+}
+
+// Delete deletes an activity. It is idempotent: a delete for an
+// activity that doesn't exist doesn't return error.
+func (s *ActivityStore) Delete(ctx context.Context, stravaID int64) error {
+	_, err := s.db.ExecContext(ctx, deleteActivityQuery, stravaID)
+	if err != nil {
+		return fmt.Errorf("delete activity %d: %w", stravaID, err)
+	}
+
+	return nil
 }
 
 // scanActivityRow scans one row in the column order of upsertActivityQuery's
