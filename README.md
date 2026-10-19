@@ -9,12 +9,13 @@ This is also a **learning project** for Go. The code is written step by step, ti
 Work in progress. What exists today:
 
 - Sign in with Strava (OAuth), which creates or updates the user and stores the tokens
+- Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
 - A season model (a named range of dates) with a CLI to create and list seasons
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: sessions and logout, receiving Strava activity events, the scoring engine, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: receiving Strava activity events, the scoring engine, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -72,11 +73,23 @@ All settings are environment variables:
 make run
 ```
 
-Then open <http://localhost:8080/auth/strava> and sign in with Strava. Check the server with:
+Then open <http://localhost:8080/auth/strava> and sign in with Strava. You are redirected to `/api/me`, which shows your profile as JSON (there is no frontend yet). Check the server with:
 
 ```
 curl localhost:8080/healthz
 ```
+
+### HTTP endpoints
+
+| Method and path | Access | What it does |
+|---|---|---|
+| `GET /healthz` | public | Health check |
+| `GET /auth/strava` | public | Starts the Strava sign-in |
+| `GET /auth/strava/callback` | public | Strava redirects here; creates the session |
+| `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
+| `GET /api/me` | signed in | The current user, without any token |
+
+Everything under `/api` answers `401` with `{"error": "..."}` when nobody is signed in. Sessions are stored in the database and sent in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` when `ENV=prod`) that lasts 30 days.
 
 ## Seasons
 

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 func TestSeasonStore_createAndList(t *testing.T) {
@@ -34,10 +36,10 @@ func TestSeasonStore_createAndList(t *testing.T) {
 	if s.ID == 0 {
 		t.Errorf("Unexpected empty ID")
 	}
-	assertEqual(t, "Name", season.Name, s.Name)
-	assertTime(t, "CreatedAt", fixed, s.CreatedAt)
-	assertTime(t, "StartDate", season.StartDate, s.StartDate)
-	assertTime(t, "EndDate", season.EndDate, s.EndDate)
+	testutil.AssertEqual(t, "Name", season.Name, s.Name)
+	testutil.AssertTime(t, "CreatedAt", fixed, s.CreatedAt)
+	testutil.AssertTime(t, "StartDate", season.StartDate, s.StartDate)
+	testutil.AssertTime(t, "EndDate", season.EndDate, s.EndDate)
 
 	// New season is listed
 	seasons, err = st.List(t.Context())
@@ -47,7 +49,7 @@ func TestSeasonStore_createAndList(t *testing.T) {
 	if len(seasons) != 1 {
 		t.Fatalf("Unexpected length: %d, expected 1", len(seasons))
 	}
-	assertEqual(t, "seasons[0].ID", s.ID, seasons[0].ID)
+	testutil.AssertEqual(t, "seasons[0].ID", s.ID, seasons[0].ID)
 }
 
 // TestSeasonStore_overlap checks every shape of overlap against an existing
@@ -102,7 +104,7 @@ func TestSeasonStore_overlap(t *testing.T) {
 				if !errors.As(err, &oe) {
 					t.Fatalf("Create error = %v, want *OverlapError", err)
 				}
-				assertEqual(t, "OverlapError.With.ID", existing.ID, oe.With.ID)
+				testutil.AssertEqual(t, "OverlapError.With.ID", existing.ID, oe.With.ID)
 			} else if err != nil {
 				t.Fatalf("Create error = %v, want no error", err)
 			}
@@ -112,7 +114,7 @@ func TestSeasonStore_overlap(t *testing.T) {
 			if err != nil {
 				t.Fatalf("List: %v", err)
 			}
-			assertEqual(t, "number of seasons", wantSeasons, len(seasons))
+			testutil.AssertEqual(t, "number of seasons", wantSeasons, len(seasons))
 		})
 	}
 }

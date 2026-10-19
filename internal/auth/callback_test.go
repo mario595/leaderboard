@@ -1,12 +1,14 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 func TestCallbackValidations(t *testing.T) {
@@ -81,7 +83,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read,activity:read"},
 			},
-			expectedStatus:    http.StatusOK,
+			expectedStatus:    http.StatusSeeOther,
 			wantCookieCleared: true,
 		},
 		{
@@ -92,7 +94,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read activity:read"},
 			},
-			expectedStatus:    http.StatusOK,
+			expectedStatus:    http.StatusSeeOther,
 			wantCookieCleared: true,
 		},
 		{
@@ -103,7 +105,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read,activity:read_all"},
 			},
-			expectedStatus:    http.StatusOK,
+			expectedStatus:    http.StatusSeeOther,
 			wantCookieCleared: true,
 		},
 	}
@@ -120,10 +122,15 @@ func TestCallbackValidations(t *testing.T) {
 
 			rec := httptest.NewRecorder()
 
-			h.Callback(rec, req)
+			serveCallback(h, rec, req)
 
 			if rec.Code != tc.expectedStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tc.expectedStatus)
+			}
+
+			// Only an accepted login creates a session.
+			if c := sessionCookieOf(rec); c != nil && tc.expectedStatus != http.StatusSeeOther {
+				t.Errorf("rejected login sets a session cookie %q, want none", c.Name)
 			}
 
 			if tc.wantCookieCleared {
@@ -164,27 +171,110 @@ func TestCallbackHappyPath(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	h.Callback(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	serveCallback(h, rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
 
-	if body := rec.Body.String(); !strings.Contains(body, "Ada") {
-		t.Errorf("body = %q, want it to mention Ada", body)
+	if loc := rec.Result().Header.Get("Location"); loc != redirectTo {
+		t.Errorf("Location: got %s, want %s", loc, redirectTo)
 	}
 
-	assertEqual(t, "upsert calls", 1, users.calls)
-	assertEqual(t, "StravaID", int64(4242), users.got.StravaID)
-	assertEqual(t, "First Name", "Ada", users.got.FirstName)
-	assertEqual(t, "Last Name", "Lovelace", users.got.LastName)
-	assertEqual(t, "Access Token", "AT", users.got.AccessToken)
-	assertEqual(t, "Refresh Token", "RT", users.got.RefreshToken)
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "session" {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Errorf("A session cookie was not found")
+	}
+
+	testutil.AssertEqual(t, "upsert calls", 1, users.calls)
+	testutil.AssertEqual(t, "StravaID", int64(4242), users.got.StravaID)
+	testutil.AssertEqual(t, "First Name", "Ada", users.got.FirstName)
+	testutil.AssertEqual(t, "Last Name", "Lovelace", users.got.LastName)
+	testutil.AssertEqual(t, "Access Token", "AT", users.got.AccessToken)
+	testutil.AssertEqual(t, "Refresh Token", "RT", users.got.RefreshToken)
 	if !users.got.TokenExpiresAt.After(time.Now().Add(5 * time.Hour)) {
 		t.Errorf("Incorrect exipresAt")
 	}
 
-	assertEqual(t, "code", "x", fs.form.Get("code"))
-	assertEqual(t, "code", "authorization_code", fs.form.Get("grant_type"))
-	assertEqual(t, "client_id", "test-id", fs.form.Get("client_id"))
-	assertEqual(t, "client_secret", "test-secret", fs.form.Get("client_secret"))
+	testutil.AssertEqual(t, "code", "x", fs.form.Get("code"))
+	testutil.AssertEqual(t, "code", "authorization_code", fs.form.Get("grant_type"))
+	testutil.AssertEqual(t, "client_id", "test-id", fs.form.Get("client_id"))
+	testutil.AssertEqual(t, "client_secret", "test-secret", fs.form.Get("client_secret"))
+
+	who := h.sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, h.sessions.GetInt64(r.Context(), SessionUserIDKey))
+	}))
+
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.AddCookie(cookie)
+	whoRec := httptest.NewRecorder()
+	who.ServeHTTP(whoRec, req)
+	testutil.AssertEqual(t, "user id stored in the sesson", "1", whoRec.Body.String())
+}
+
+func serveCallback(h *Handler, w http.ResponseWriter, r *http.Request) {
+	handler := h.sessions.LoadAndSave(http.HandlerFunc(h.Callback))
+	handler.ServeHTTP(w, r)
+}
+
+// sessionCookieOf returns the session cookie set by a response, or nil.
+func sessionCookieOf(rec *httptest.ResponseRecorder) *http.Cookie {
+	res := rec.Result()
+	defer func() { _ = res.Body.Close() }()
+
+	for _, c := range res.Cookies() {
+		if c.Name == "session" {
+			return c
+		}
+	}
+	return nil
+}
+
+// TestCallback_renewsExistingSession is the session fixation defence: a session
+// that exists before the login (for instance one planted by an attacker) must
+// not survive it. The login has to hand out a new token, and the old one must
+// stop working.
+func TestCallback_renewsExistingSession(t *testing.T) {
+	fs := newFakeStrava(t, http.StatusOK, validTokenJSON)
+	h := newHandlerWith(fs, &fakeUserStore{})
+
+	// A session that exists before the login.
+	plant := h.sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.sessions.Put(r.Context(), "planted", "yes")
+	}))
+	plantRec := httptest.NewRecorder()
+	plant.ServeHTTP(plantRec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	old := sessionCookieOf(plantRec)
+	if old == nil {
+		t.Fatal("setup: no session cookie for the existing session")
+	}
+
+	// Log in carrying that session.
+	req := validCallbackRequest(t)
+	req.AddCookie(old)
+	rec := httptest.NewRecorder()
+	serveCallback(h, rec, req)
+
+	testutil.AssertEqual(t, "status", http.StatusSeeOther, rec.Code)
+	fresh := sessionCookieOf(rec)
+	if fresh == nil {
+		t.Fatal("the login did not set a session cookie")
+	}
+	if fresh.Value == old.Value {
+		t.Error("the login kept the session token that existed before it")
+	}
+
+	// The old token must no longer give access to the old session.
+	read := h.sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, h.sessions.GetString(r.Context(), "planted"))
+	}))
+	oldReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	oldReq.AddCookie(old)
+	oldRec := httptest.NewRecorder()
+	read.ServeHTTP(oldRec, oldReq)
+	testutil.AssertEqual(t, "data reachable with the old token", "", oldRec.Body.String())
 }

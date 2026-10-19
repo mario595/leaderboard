@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/alexedwards/scs/v2"
 )
 
 func TestHealthz(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	router := NewRouter(logger, nil)
+	router := NewRouter(Deps{Logger: logger, Sessions: scs.New()})
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()

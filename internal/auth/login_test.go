@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 // loginResult holds what the tests need from a response to Login.
@@ -59,9 +61,9 @@ func TestLogin_redirectsToStrava(t *testing.T) {
 	}
 
 	q := res.loc.Query()
-	assertEqual(t, "client_id", "test-id", q.Get("client_id"))
-	assertEqual(t, "response_type", "code", q.Get("response_type"))
-	assertEqual(t, "redirect_uri", "http://localhost:8080/auth/strava/callback", q.Get("redirect_uri"))
+	testutil.AssertEqual(t, "client_id", "test-id", q.Get("client_id"))
+	testutil.AssertEqual(t, "response_type", "code", q.Get("response_type"))
+	testutil.AssertEqual(t, "redirect_uri", "http://localhost:8080/auth/strava/callback", q.Get("redirect_uri"))
 
 	scope := q.Get("scope")
 	for _, want := range []string{"read", "activity:read"} {
@@ -81,7 +83,7 @@ func TestLogin_stateCookie(t *testing.T) {
 
 	// The cookie and the URL carry the same state: this is what the callback
 	// compares to prove that the browser started the flow.
-	assertEqual(t, "cookie value", res.loc.Query().Get("state"), c.Value)
+	testutil.AssertEqual(t, "cookie value", res.loc.Query().Get("state"), c.Value)
 
 	if !c.HttpOnly {
 		t.Error("cookie is not HttpOnly")
@@ -89,9 +91,9 @@ func TestLogin_stateCookie(t *testing.T) {
 	if c.Secure {
 		t.Error("cookie is Secure, want not Secure when secureCookies is false")
 	}
-	assertEqual(t, "cookie path", "/auth/strava", c.Path)
-	assertEqual(t, "cookie SameSite", http.SameSiteLaxMode, c.SameSite)
-	assertEqual(t, "cookie MaxAge", 600, c.MaxAge)
+	testutil.AssertEqual(t, "cookie path", "/auth/strava", c.Path)
+	testutil.AssertEqual(t, "cookie SameSite", http.SameSiteLaxMode, c.SameSite)
+	testutil.AssertEqual(t, "cookie MaxAge", 600, c.MaxAge)
 }
 
 func TestLogin_secureCookie(t *testing.T) {

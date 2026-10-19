@@ -1,5 +1,11 @@
 version: "2"
 
+run:
+  # Report file paths relative to the directory golangci-lint runs from. The Go
+  # extension for VS Code runs it from the package directory, so with the default
+  # (relative to this file) it cannot map findings back to the files.
+  relative-path-mode: wd
+
 linters:
   default: standard
   enable:

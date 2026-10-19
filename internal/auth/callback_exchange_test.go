@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/store"
+	"github.com/mario595/leaderboard/internal/testutil"
 )
 
 type fakeStrava struct {
@@ -54,7 +56,7 @@ func (f *fakeUserStore) Upsert(_ context.Context, u store.User) (store.User, err
 func newHandlerWith(fs *fakeStrava, users UserStore) *Handler {
 	cfg := NewOauthConfig("test-id", "test-secret", "http://localhost:8080")
 	cfg.Endpoint.TokenURL = fs.server.URL + "/oauth/token"
-	return New(cfg, users, slog.New(slog.DiscardHandler), fs.server.Client(), false)
+	return New(cfg, users, scs.New(), slog.New(slog.DiscardHandler), fs.server.Client(), false)
 }
 
 const validTokenJSON = `{"token_type":"Bearer","access_token":"AT","refresh_token":"RT",
@@ -136,10 +138,15 @@ func TestCallback_exchangeFailures(t *testing.T) {
 			h := newHandlerWith(fs, users)
 			rec := httptest.NewRecorder()
 
-			h.Callback(rec, validCallbackRequest(t))
+			serveCallback(h, rec, validCallbackRequest(t))
 
-			assertEqual(t, "status", tc.wantStatus, rec.Code)
-			assertEqual(t, "store calls", tc.wantStoreCall, users.calls)
+			testutil.AssertEqual(t, "status", tc.wantStatus, rec.Code)
+			testutil.AssertEqual(t, "store calls", tc.wantStoreCall, users.calls)
+
+			// A failed login must not leave a session behind.
+			if c := sessionCookieOf(rec); c != nil {
+				t.Errorf("response sets a session cookie %q, want none", c.Name)
+			}
 
 			// Nothing sensitive or internal may leak into the response.
 			body := rec.Body.String()
@@ -173,11 +180,11 @@ func TestCallback_stravaTimeout(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	start := time.Now()
-	h.Callback(rec, validCallbackRequest(t))
+	serveCallback(h, rec, validCallbackRequest(t))
 	elapsed := time.Since(start)
 
-	assertEqual(t, "status", http.StatusBadGateway, rec.Code)
-	assertEqual(t, "store calls", 0, users.calls)
+	testutil.AssertEqual(t, "status", http.StatusBadGateway, rec.Code)
+	testutil.AssertEqual(t, "store calls", 0, users.calls)
 	if elapsed > 2*time.Second {
 		t.Errorf("handler took %v, want it to give up after the client timeout (50ms)", elapsed)
 	}
