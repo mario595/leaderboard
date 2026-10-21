@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-var ErrNotFound = errors.New("not found")
-
 const upsertUserQuery = `
 	INSERT INTO users (strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -79,7 +77,7 @@ func (s *UserStore) Upsert(ctx context.Context, u User) (User, error) {
 		now.Unix(),
 	)
 
-	user, err := scanRow(r)
+	user, err := scanUserRow(r)
 	if err != nil {
 		return User{}, fmt.Errorf("upsert user: %w", err)
 	}
@@ -88,7 +86,7 @@ func (s *UserStore) Upsert(ctx context.Context, u User) (User, error) {
 
 func (s *UserStore) GetByStravaID(ctx context.Context, stravaID int64) (User, error) {
 	r := s.db.QueryRowContext(ctx, getByStravaIDQuery, stravaID)
-	user, err := scanRow(r)
+	user, err := scanUserRow(r)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -103,7 +101,7 @@ func (s *UserStore) GetByStravaID(ctx context.Context, stravaID int64) (User, er
 // GetByID returns the user with the given internal id, or ErrNotFound.
 func (s *UserStore) GetByID(ctx context.Context, id int64) (User, error) {
 	r := s.db.QueryRowContext(ctx, getByIDQuery, id)
-	user, err := scanRow(r)
+	user, err := scanUserRow(r)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -114,11 +112,7 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (User, error) {
 	return user, nil
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanRow(r rowScanner) (User, error) {
+func scanUserRow(r rowScanner) (User, error) {
 	var user User
 	var expiresAt, createdAt, updatedAt int64
 	err := r.Scan(

@@ -11,12 +11,13 @@ Work in progress. What exists today:
 - Sign in with Strava (OAuth), which creates or updates the user and stores the tokens
 - Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
 - A season model (a named range of dates) with a CLI to create and list seasons
-- The scoring rules below, as a tested Go package (`internal/scoring`); not yet applied to real activities
+- The scoring rules below, as a tested Go package (`internal/scoring`)
+- Activity storage with points recomputed per user and day on every save or delete (`internal/activity`); not fed by Strava yet
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: receiving Strava activity events and storing their points, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: receiving Strava activity events, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 

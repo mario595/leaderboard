@@ -13,7 +13,9 @@ linters:
     - errorlint
     - misspell
     - noctx
+    - rowserrcheck
     - sloglint
+    - sqlclosecheck
 
 formatters:
   enable:
