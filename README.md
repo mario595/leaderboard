@@ -14,11 +14,12 @@ Work in progress. What exists today:
 - The scoring rules below, as a tested Go package (`internal/scoring`)
 - Activity storage with points recomputed per user and day on every save or delete (`internal/activity`); not fed by Strava yet
 - A Strava API client that refreshes expired access tokens and saves the new ones, and fetches an activity with errors for not found, revoked access and rate limits (`internal/strava`); not called by the app yet
+- A Strava webhook endpoint that verifies the subscription and stores incoming events (`internal/webhook`); events are not processed yet
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: receiving Strava activity events, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: processing Strava activity events, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
