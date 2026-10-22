@@ -33,6 +33,15 @@ const getByIDQuery = `
 	WHERE id = ?;
 `
 
+const updateTokensQuery = `
+	UPDATE users
+	SET access_token = ?,
+		refresh_token = ?,
+		token_expires_at = ?,
+		updated_at = ?
+	WHERE id = ?;
+`
+
 // User is a Strava user
 type User struct {
 	ID             int64
@@ -110,6 +119,25 @@ func (s *UserStore) GetByID(ctx context.Context, id int64) (User, error) {
 		return User{}, fmt.Errorf("get user by id: %w", err)
 	}
 	return user, nil
+}
+
+// UpdateTokens replaces the access token, refresh token and expiry of the
+// user with the given internal ID, all together (Strava can rotate the
+// refresh token on every refresh). It returns ErrNotFound if no such user
+// exists: a silent no-op would lose the new tokens.
+func (s *UserStore) UpdateTokens(ctx context.Context, userID int64, accessToken, refreshToken string, expiresAt time.Time) error {
+	r, err := s.db.ExecContext(ctx, updateTokensQuery, accessToken, refreshToken, expiresAt.Unix(), s.now().Unix(), userID)
+	if err != nil {
+		return fmt.Errorf("update tokens for user %d: %w", userID, err)
+	}
+	rowsCount, err := r.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update tokens for user %d: %w", userID, err)
+	}
+	if rowsCount == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func scanUserRow(r rowScanner) (User, error) {
