@@ -119,6 +119,63 @@ func TestGetByID_NotFound(t *testing.T) {
 	}
 }
 
+func TestUpdateTokens(t *testing.T) {
+	s := newTestStore(t)
+	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Hour)
+	s.now = func() time.Time { return t0 }
+
+	luke, err := s.Upsert(t.Context(), User{
+		StravaID: 1, FirstName: "Luke", LastName: "Skywalker",
+		AccessToken: "luke-access", RefreshToken: "luke-refresh", TokenExpiresAt: t0,
+	})
+	if err != nil {
+		t.Fatalf("upsert luke: %v", err)
+	}
+	leia, err := s.Upsert(t.Context(), User{
+		StravaID: 2, FirstName: "Leia", LastName: "Organa",
+		AccessToken: "leia-access", RefreshToken: "leia-refresh", TokenExpiresAt: t0,
+	})
+	if err != nil {
+		t.Fatalf("upsert leia: %v", err)
+	}
+
+	s.now = func() time.Time { return t1 }
+	newExpiry := t1.Add(6 * time.Hour)
+	if err := s.UpdateTokens(t.Context(), luke.ID, "new-access", "new-refresh", newExpiry); err != nil {
+		t.Fatalf("UpdateTokens: %v", err)
+	}
+
+	got, err := s.GetByID(t.Context(), luke.ID)
+	if err != nil {
+		t.Fatalf("GetByID luke: %v", err)
+	}
+	testutil.AssertEqual(t, "AccessToken", "new-access", got.AccessToken)
+	testutil.AssertEqual(t, "RefreshToken", "new-refresh", got.RefreshToken)
+	testutil.AssertTime(t, "TokenExpiresAt", newExpiry, got.TokenExpiresAt)
+	testutil.AssertTime(t, "UpdatedAt", t1, got.UpdatedAt)
+	testutil.AssertTime(t, "CreatedAt", t0, got.CreatedAt)
+	testutil.AssertEqual(t, "FirstName", "Luke", got.FirstName)
+
+	// Positive control for the WHERE clause: the other user keeps her tokens.
+	other, err := s.GetByID(t.Context(), leia.ID)
+	if err != nil {
+		t.Fatalf("GetByID leia: %v", err)
+	}
+	testutil.AssertEqual(t, "other user AccessToken", "leia-access", other.AccessToken)
+	testutil.AssertEqual(t, "other user RefreshToken", "leia-refresh", other.RefreshToken)
+}
+
+func TestUpdateTokens_NotFound(t *testing.T) {
+	s := newTestStore(t)
+
+	// A silent no-op would lose a rotated refresh token: unknown users are an error.
+	err := s.UpdateTokens(t.Context(), 123, "access", "refresh", time.Now())
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("UpdateTokens unknown user: got error %v, wanted ErrNotFound", err)
+	}
+}
+
 func newTestStore(t *testing.T) *UserStore {
 	t.Helper()
 	return NewUserStore(newTestDB(t))

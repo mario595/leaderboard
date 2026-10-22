@@ -13,6 +13,7 @@ Work in progress. What exists today:
 - A season model (a named range of dates) with a CLI to create and list seasons
 - The scoring rules below, as a tested Go package (`internal/scoring`)
 - Activity storage with points recomputed per user and day on every save or delete (`internal/activity`); not fed by Strava yet
+- A Strava API client that refreshes expired access tokens and saves the new ones (`internal/strava`); no endpoints used yet
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
