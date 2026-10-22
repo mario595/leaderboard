@@ -3,8 +3,11 @@ package strava
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -68,9 +71,11 @@ func (a *API) ForUser(userID int64, tok *oauth2.Token) *Client {
 }
 
 // get sends a GET request to path (relative to the API root) and decodes the
-// JSON response into out, which must be a pointer. A status other than 200 is
-// an error. A failed token refresh returns an error wrapping
-// *oauth2.RetrieveError.
+// JSON response into out, which must be a pointer. Status 404, 401 and 429
+// become ErrNotFound, ErrUnauthorized and *RateLimitError; any other status
+// than 200 is a plain error. A failed token refresh returns an error wrapping
+// *oauth2.RetrieveError, and also ErrUnauthorized when Strava rejected the
+// refresh token.
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
@@ -78,12 +83,34 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
+		var retrieveErr *oauth2.RetrieveError
+		if errors.As(err, &retrieveErr) && retrieveErr.Response != nil &&
+			(retrieveErr.Response.StatusCode == http.StatusBadRequest || retrieveErr.Response.StatusCode == http.StatusUnauthorized) {
+			return fmt.Errorf("strava GET %s: %w: %w", path, ErrUnauthorized, err)
+		}
 		return fmt.Errorf("strava GET %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("strava GET %s: status %d", path, resp.StatusCode)
+		switch resp.StatusCode {
+		case http.StatusNotFound:
+			return fmt.Errorf("strava GET %s: %w", path, ErrNotFound)
+		case http.StatusUnauthorized:
+			return fmt.Errorf("strava GET %s: %w", path, ErrUnauthorized)
+		case http.StatusTooManyRequests:
+			shortUsage, dailyUsage := parsePair(resp.Header.Get("X-RateLimit-Usage"))
+			shortLimit, dailyLimit := parsePair(resp.Header.Get("X-RateLimit-Limit"))
+			rateLimitErr := &RateLimitError{
+				ShortUsage: shortUsage,
+				DailyUsage: dailyUsage,
+				ShortLimit: shortLimit,
+				DailyLimit: dailyLimit,
+			}
+			return fmt.Errorf("strava GET %s: %w", path, rateLimitErr)
+		default:
+			return fmt.Errorf("strava GET %s: status %d", path, resp.StatusCode)
+		}
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(out)
@@ -92,4 +119,14 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	}
 
 	return nil
+}
+
+// parsePair parses a Strava rate-limit header such as "201,1803" into its
+// 15-minute and daily values. A missing or malformed part is 0, on purpose:
+// a 429 must become a RateLimitError even when the numbers are unusable.
+func parsePair(h string) (short, daily int) {
+	s, d, _ := strings.Cut(h, ",")
+	short, _ = strconv.Atoi(s)
+	daily, _ = strconv.Atoi(d)
+	return short, daily
 }
