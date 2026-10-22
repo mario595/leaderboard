@@ -1,16 +1,20 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/auth"
 	"github.com/mario595/leaderboard/internal/store"
 	"github.com/mario595/leaderboard/internal/testutil"
+	"github.com/mario595/leaderboard/internal/webhook"
 )
 
 // newAPIApp builds the real router with a fake user store, plus a test-only
@@ -184,6 +188,73 @@ func TestRouter_authRoutes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRouter_webhookRoutes(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	events := &fakeEventInserter{}
+	router := NewRouter(Deps{
+		Logger:   logger,
+		Sessions: scs.New(),
+		Users:    &fakeUserStore{},
+		Webhook:  webhook.New(events, "verify-me", 120475, nil, logger),
+	})
+
+	const event = `{"aspect_type":"create","event_time":1760521800,"object_id":12345678901,"object_type":"activity","owner_id":134815,"subscription_id":120475}`
+	testCases := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		wantStatus int
+	}{
+		// Public: Strava has no session.
+		{name: "handshake", method: http.MethodGet, path: "/webhook/strava?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=abc", wantStatus: http.StatusOK},
+		{name: "event", method: http.MethodPost, path: "/webhook/strava", body: event, wantStatus: http.StatusOK},
+		// Positive control: the routes are not public by accident of an open router.
+		{name: "api still protected", method: http.MethodGet, path: "/api/me", wantStatus: http.StatusUnauthorized},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, strings.NewReader(tc.body))
+			rec := httptest.NewRecorder()
+
+			router.ServeHTTP(rec, req)
+
+			testutil.AssertEqual(t, "status", tc.wantStatus, rec.Code)
+		})
+	}
+	testutil.AssertEqual(t, "events stored through the router", 1, events.count())
+}
+
+func TestRouter_noWebhookWithoutHandler(t *testing.T) {
+	router := NewRouter(Deps{Logger: slog.New(slog.DiscardHandler), Sessions: scs.New()})
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/webhook/strava", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	testutil.AssertEqual(t, "status", http.StatusNotFound, rec.Code)
+}
+
+// fakeEventInserter counts stored events.
+type fakeEventInserter struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (f *fakeEventInserter) Insert(_ context.Context, _ store.Event) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.n++
+	return true, nil
+}
+
+func (f *fakeEventInserter) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.n
 }
 
 func TestRouter(t *testing.T) {

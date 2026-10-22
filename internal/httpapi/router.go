@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/mario595/leaderboard/internal/auth"
+	"github.com/mario595/leaderboard/internal/webhook"
 )
 
 type Deps struct {
@@ -16,6 +17,7 @@ type Deps struct {
 	Auth     *auth.Handler
 	Sessions *scs.SessionManager
 	Users    userGetter
+	Webhook  *webhook.Handler
 }
 
 // NewRouter builds the http router with all the application routes.
@@ -37,6 +39,13 @@ func NewRouter(deps Deps) http.Handler {
 		r.Route("/api", func(r chi.Router) {
 			r.Use(requireAuth(deps.Sessions, deps.Logger))
 			r.Get("/me", meHandler(deps.Users, deps.Sessions, deps.Logger))
+		})
+	}
+
+	if deps.Webhook != nil {
+		r.Route("/webhook", func(r chi.Router) {
+			r.Get("/strava", deps.Webhook.Verify)
+			r.Post("/strava", deps.Webhook.Receive)
 		})
 	}
 

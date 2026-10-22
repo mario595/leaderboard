@@ -120,6 +120,54 @@ func TestLoad(t *testing.T) {
 			},
 		},
 		{
+			name: "StravaVerifyToken",
+			env:  map[string]string{"STRAVA_VERIFY_TOKEN": "s3cret"},
+			want: Config{
+				Addr:              ":8080",
+				Env:               "dev",
+				LogLevel:          "info",
+				DBPath:            "data/leaderboard.db",
+				BaseURL:           "http://localhost:8080",
+				StravaVerifyToken: "s3cret",
+			},
+		},
+		{
+			name: "StravaSubscriptionID",
+			env:  map[string]string{"STRAVA_SUBSCRIPTION_ID": "120475"},
+			want: Config{
+				Addr:                 ":8080",
+				Env:                  "dev",
+				LogLevel:             "info",
+				DBPath:               "data/leaderboard.db",
+				BaseURL:              "http://localhost:8080",
+				StravaSubscriptionID: 120475,
+			},
+		},
+		{
+			// Unset means "no subscription yet": 0, not an error.
+			name: "StravaSubscriptionID unset",
+			env:  map[string]string{"STRAVA_SUBSCRIPTION_ID": ""},
+			want: Config{
+				Addr:     ":8080",
+				Env:      "dev",
+				LogLevel: "info",
+				DBPath:   "data/leaderboard.db",
+				BaseURL:  "http://localhost:8080",
+			},
+		},
+		{
+			name:    "StravaSubscriptionID not a number",
+			env:     map[string]string{"STRAVA_SUBSCRIPTION_ID": "abc"},
+			want:    Config{},
+			wantErr: true,
+		},
+		{
+			name:    "StravaSubscriptionID negative",
+			env:     map[string]string{"STRAVA_SUBSCRIPTION_ID": "-5"},
+			want:    Config{},
+			wantErr: true,
+		},
+		{
 			name:    "LogLevel error",
 			env:     map[string]string{"LOG_LEVEL": "invalid"},
 			want:    Config{},

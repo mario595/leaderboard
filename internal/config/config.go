@@ -3,17 +3,20 @@ package config
 import (
 	"fmt"
 	"slices"
+	"strconv"
 )
 
 // Config holds the application settings, loaded from environment variables
 type Config struct {
-	Addr               string
-	Env                string
-	LogLevel           string
-	DBPath             string
-	StravaClientID     string
-	StravaClientSecret string
-	BaseURL            string
+	Addr                 string
+	Env                  string
+	LogLevel             string
+	DBPath               string
+	StravaClientID       string
+	StravaClientSecret   string
+	BaseURL              string
+	StravaVerifyToken    string
+	StravaSubscriptionID int64
 }
 
 var validEnvs = []string{"dev", "prod"}
@@ -26,7 +29,8 @@ func getOr(getenv func(string) string, key, def string) string {
 	return def
 }
 
-// Load loads the config using getenv. By default, it uses ADDR=:8080, ENV=dev, LOG_LEVEL=info
+// Load loads the config using getenv. By default, it uses ADDR=:8080, ENV=dev, LOG_LEVEL=info.
+// STRAVA_SUBSCRIPTION_ID is optional (must be positive integer when set).
 func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Addr:               getOr(getenv, "ADDR", ":8080"),
@@ -36,6 +40,18 @@ func Load(getenv func(string) string) (Config, error) {
 		StravaClientID:     getOr(getenv, "STRAVA_CLIENT_ID", ""),
 		StravaClientSecret: getOr(getenv, "STRAVA_CLIENT_SECRET", ""),
 		BaseURL:            getOr(getenv, "BASE_URL", "http://localhost:8080"),
+		StravaVerifyToken:  getOr(getenv, "STRAVA_VERIFY_TOKEN", ""),
+	}
+
+	if v := getOr(getenv, "STRAVA_SUBSCRIPTION_ID", "0"); v != "0" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid STRAVA_SUBSCRIPTION_ID %q: %w", v, err)
+		}
+		if id <= 0 {
+			return Config{}, fmt.Errorf("invalid STRAVA_SUBSCRIPTION_ID %q: must be positive", v)
+		}
+		cfg.StravaSubscriptionID = id
 	}
 
 	if !slices.Contains(validEnvs, cfg.Env) {
