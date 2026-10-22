@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -309,16 +310,18 @@ type fakeStrava struct {
 	apiStatus    int           // set by tests before the first request
 	tokenStatus  int           // set by tests before the first request
 	delay        time.Duration // set by tests: every handler sleeps this long
+	rateUsage    string        // set by tests: X-RateLimit-Usage on API responses
 	refreshes    int
 	grantType    string
 	refreshToken string
 	apiCalls     int
 	apiAuth      string
+	apiPath      string
 }
 
 func newFakeStrava(t *testing.T) *fakeStrava {
 	t.Helper()
-	f := &fakeStrava{apiStatus: http.StatusOK, tokenStatus: http.StatusOK}
+	f := &fakeStrava{apiStatus: http.StatusOK, tokenStatus: http.StatusOK, rateUsage: "31,512"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
@@ -365,6 +368,42 @@ func newFakeStrava(t *testing.T) *fakeStrava {
 		_, _ = w.Write([]byte(`{"id":42,"firstname":"Test"}`))
 	})
 
+	// Activity IDs this fake knows, mapped to fixtures in testdata.
+	activities := map[string]string{
+		"12345678901": "activity_run.json",
+		"12345678902": "activity_race_ride.json",
+	}
+	mux.HandleFunc("GET /activities/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.apiCalls++
+		f.apiAuth = r.Header.Get("Authorization")
+		f.apiPath = r.URL.Path
+		status, delay, usage := f.apiStatus, f.delay, f.rateUsage
+		f.mu.Unlock()
+		time.Sleep(delay)
+
+		// Strava sends its rate limits on every API response.
+		w.Header().Set("X-RateLimit-Limit", "200,2000")
+		w.Header().Set("X-RateLimit-Usage", usage)
+
+		if status != http.StatusOK {
+			http.Error(w, `{"message":"error"}`, status)
+			return
+		}
+		fixture, ok := activities[r.PathValue("id")]
+		if !ok {
+			http.Error(w, `{"message":"Record Not Found"}`, http.StatusNotFound)
+			return
+		}
+		data, err := os.ReadFile("testdata/" + fixture)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(data)
+	})
+
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
@@ -386,6 +425,12 @@ func (f *fakeStrava) lastRefreshToken() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.refreshToken
+}
+
+func (f *fakeStrava) lastAPIPath() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.apiPath
 }
 
 func (f *fakeStrava) apiCount() int {
