@@ -56,6 +56,8 @@ Copy `.env.example` to `.env` (it is git-ignored) and fill in the values:
 STRAVA_CLIENT_ID=...
 STRAVA_CLIENT_SECRET=...
 BASE_URL=http://localhost:8080
+STRAVA_VERIFY_TOKEN=...      # openssl rand -hex 16
+STRAVA_SUBSCRIPTION_ID=      # set after creating the webhook subscription
 ```
 
 All settings are environment variables:
@@ -64,6 +66,8 @@ All settings are environment variables:
 |---|---|---|
 | `STRAVA_CLIENT_ID` | none | Strava application id. Required to run the server. |
 | `STRAVA_CLIENT_SECRET` | none | Strava application secret. Required to run the server. Never commit it. |
+| `STRAVA_VERIFY_TOKEN` | none | Secret checked when Strava validates the webhook callback. Required to run the server. |
+| `STRAVA_SUBSCRIPTION_ID` | unset | ID of our Strava webhook subscription. Events for any other ID are rejected; while unset, all events are. |
 | `BASE_URL` | `http://localhost:8080` | Public address of the app. Strava redirects back to `BASE_URL/auth/strava/callback`. |
 | `ADDR` | `:8080` | Address the server listens on. |
 | `ENV` | `dev` | `dev` (text logs) or `prod` (JSON logs, secure cookies). |
@@ -91,6 +95,8 @@ curl localhost:8080/healthz
 | `GET /auth/strava/callback` | public | Strava redirects here; creates the session |
 | `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
 | `GET /api/me` | signed in | The current user, without any token |
+| `GET /webhook/strava` | public | Strava's subscription check: echoes the challenge if the verify token matches |
+| `POST /webhook/strava` | public | Strava webhook events; stored, then processed in the background |
 
 Everything under `/api` answers `401` with `{"error": "..."}` when nobody is signed in. Sessions are stored in the database and sent in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` when `ENV=prod`) that lasts 30 days.
 
@@ -104,6 +110,30 @@ go run ./cmd/server season list
 ```
 
 Both dates are inclusive, the end must be after the start, and seasons cannot overlap. `go run ./cmd/server` or `go run ./cmd/server serve` starts the web server.
+
+## Strava webhooks
+
+Strava notifies the app when a member creates, edits or deletes an activity, by calling a public URL: one subscription per Strava application. The server only stores each event and answers; processing happens in the background.
+
+For local development the server must be reachable from the internet. Any tunnel works:
+
+- **A named Cloudflare tunnel on your own domain** (recommended): the URL is stable, so the subscription is created once. Run `cloudflared` as a service with an `ingress` rule for your hostname pointing to `http://localhost:8080` and a final `http_status:404` rule.
+- **A quick tunnel**, no account needed: `cloudflared tunnel --url http://localhost:8080` prints a random `https://<name>.trycloudflare.com` URL. It changes on every run, so delete and recreate the subscription each time.
+
+If the domain uses Cloudflare Access or Bot Fight Mode, make sure they do not cover this hostname: Strava cannot pass a login page or a challenge.
+
+Create the subscription:
+
+1. Start the server (`make run`) and the tunnel. Check `https://<host>/healthz`.
+2. Subscribe. Strava calls the callback during this request to check `STRAVA_VERIFY_TOKEN`:
+   ```
+   make strava-subscribe CALLBACK=https://<host>/webhook/strava
+   ```
+   The response contains the subscription `id`.
+3. Put the `id` in `.env` as `STRAVA_SUBSCRIPTION_ID` and restart the server.
+4. Edit an activity on Strava (changing its title is enough). The server logs the event and stores it in the `webhook_events` table with status `pending`.
+
+`make strava-subscription` shows the current subscription and `make strava-unsubscribe ID=<id>` deletes it. While the server is down, Strava's deliveries fail and, after a few retries, are lost.
 
 ## Development
 
