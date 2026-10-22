@@ -52,7 +52,12 @@ func New(cfg *oauth2.Config, base *http.Client, tokens TokenStore, baseURL strin
 // unit of work (one webhook event, one backfill run) and then dropped.
 func (a *API) ForUser(userID int64, tok *oauth2.Token) *Client {
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, a.http)
-	src := a.cfg.TokenSource(ctx, tok)
+	src := &savingTokenSource{
+		src:    a.cfg.TokenSource(ctx, tok),
+		userID: userID,
+		store:  a.tokens,
+		last:   tok.AccessToken,
+	}
 	return &Client{
 		http: &http.Client{
 			Timeout:   a.http.Timeout,

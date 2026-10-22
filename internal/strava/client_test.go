@@ -1,10 +1,12 @@
 package strava
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -12,8 +14,13 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/mario595/leaderboard/internal/store"
 	"github.com/mario595/leaderboard/internal/testutil"
 )
+
+// The compile-time check lives in a test file so that production code in
+// this package does not import store.
+var _ TokenStore = (*store.UserStore)(nil)
 
 func TestGet_validTokenSendsBearer(t *testing.T) {
 	fake := newFakeStrava(t)
@@ -119,13 +126,153 @@ func TestGet_refreshUsesBaseTimeout(t *testing.T) {
 	}
 }
 
+func TestSave_expiredTokenIsSavedOnce(t *testing.T) {
+	fake := newFakeStrava(t)
+	tokens := &fakeTokenStore{}
+	client := newTestAPIWith(fake, tokens, 5*time.Second).ForUser(7, expiredToken())
+
+	var athlete struct{}
+	if err := client.get(t.Context(), "/athlete", &athlete); err != nil {
+		t.Fatalf("first get: %v", err)
+	}
+	// The second request reuses the refreshed token: no new refresh, no new save.
+	if err := client.get(t.Context(), "/athlete", &athlete); err != nil {
+		t.Fatalf("second get: %v", err)
+	}
+
+	saves := tokens.savedCalls()
+	if len(saves) != 1 {
+		t.Fatalf("saves: got %d, wanted 1 (%+v)", len(saves), saves)
+	}
+	got := saves[0]
+	testutil.AssertEqual(t, "userID", int64(7), got.userID)
+	testutil.AssertEqual(t, "access token", "new-access", got.accessToken)
+	// Strava rotates refresh tokens: the new one must be stored too.
+	testutil.AssertEqual(t, "refresh token", "new-refresh", got.refreshToken)
+	if want := time.Now().Add(6 * time.Hour); got.expiresAt.Before(want.Add(-time.Minute)) || got.expiresAt.After(want.Add(time.Minute)) {
+		t.Errorf("expiresAt: got %v, wanted about %v", got.expiresAt, want)
+	}
+	testutil.AssertEqual(t, "refresh calls", 1, fake.refreshCount())
+}
+
+func TestSave_validTokenIsNotSaved(t *testing.T) {
+	fake := newFakeStrava(t)
+	tokens := &fakeTokenStore{}
+	client := newTestAPIWith(fake, tokens, 5*time.Second).ForUser(7, validToken())
+
+	var athlete struct{}
+	if err := client.get(t.Context(), "/athlete", &athlete); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	testutil.AssertEqual(t, "saves", 0, len(tokens.savedCalls()))
+}
+
+func TestSave_failureFailsTheRequestAndIsRetried(t *testing.T) {
+	fake := newFakeStrava(t)
+	errDB := errors.New("database is down")
+	tokens := &fakeTokenStore{failures: 1, err: errDB}
+	client := newTestAPIWith(fake, tokens, 5*time.Second).ForUser(7, expiredToken())
+
+	// First request: the refresh works, the save fails, so the request fails
+	// before reaching the API. Going on with a token we could not store would
+	// lose the rotated refresh token.
+	var athlete struct{}
+	err := client.get(t.Context(), "/athlete", &athlete)
+	if !errors.Is(err, errDB) {
+		t.Fatalf("get with failing save: got error %v, wanted one wrapping %v", err, errDB)
+	}
+	testutil.AssertEqual(t, "API calls after failed save", 0, fake.apiCount())
+
+	// Second request: the token is still the refreshed one (no new refresh),
+	// and saving it is tried again.
+	if err := client.get(t.Context(), "/athlete", &athlete); err != nil {
+		t.Fatalf("get after failed save: %v", err)
+	}
+	testutil.AssertEqual(t, "save attempts", 2, tokens.attemptCount())
+	testutil.AssertEqual(t, "successful saves", 1, len(tokens.savedCalls()))
+	testutil.AssertEqual(t, "refresh calls", 1, fake.refreshCount())
+}
+
+func TestSave_concurrentRequestsRefreshAndSaveOnce(t *testing.T) {
+	fake := newFakeStrava(t)
+	tokens := &fakeTokenStore{}
+	client := newTestAPIWith(fake, tokens, 5*time.Second).ForUser(7, expiredToken())
+
+	const workers = 10
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var athlete struct{}
+			errs <- client.get(t.Context(), "/athlete", &athlete)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Errorf("concurrent get: %v", err)
+		}
+	}
+	testutil.AssertEqual(t, "refresh calls", 1, fake.refreshCount())
+	testutil.AssertEqual(t, "saves", 1, len(tokens.savedCalls()))
+	testutil.AssertEqual(t, "API calls", workers, fake.apiCount())
+}
+
+// fakeTokenStore records saves. The first `failures` calls return err.
+// Saves happen on request goroutines, so fields are guarded by mu.
+type fakeTokenStore struct {
+	mu       sync.Mutex
+	failures int
+	err      error
+	attempts int
+	saved    []savedTokens
+}
+
+type savedTokens struct {
+	userID       int64
+	accessToken  string
+	refreshToken string
+	expiresAt    time.Time
+}
+
+func (f *fakeTokenStore) UpdateTokens(_ context.Context, userID int64, accessToken, refreshToken string, expiresAt time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.attempts++
+	if f.attempts <= f.failures {
+		return f.err
+	}
+	f.saved = append(f.saved, savedTokens{userID, accessToken, refreshToken, expiresAt})
+	return nil
+}
+
+func (f *fakeTokenStore) savedCalls() []savedTokens {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.saved)
+}
+
+func (f *fakeTokenStore) attemptCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.attempts
+}
+
 // newTestAPI returns an API whose token endpoint and API root both point at
-// the fake server. Step 2 does not save tokens, so the TokenStore is nil.
+// the fake server, with a token store that accepts every save.
 func newTestAPI(fake *fakeStrava) *API {
-	return newTestAPIWithTimeout(fake, 5*time.Second)
+	return newTestAPIWith(fake, &fakeTokenStore{}, 5*time.Second)
 }
 
 func newTestAPIWithTimeout(fake *fakeStrava, timeout time.Duration) *API {
+	return newTestAPIWith(fake, &fakeTokenStore{}, timeout)
+}
+
+func newTestAPIWith(fake *fakeStrava, tokens TokenStore, timeout time.Duration) *API {
 	cfg := &oauth2.Config{
 		ClientID:     "client-id",
 		ClientSecret: "client-secret",
@@ -134,7 +281,7 @@ func newTestAPIWithTimeout(fake *fakeStrava, timeout time.Duration) *API {
 			AuthStyle: oauth2.AuthStyleInParams, // as Strava requires
 		},
 	}
-	return New(cfg, &http.Client{Timeout: timeout}, nil, fake.srv.URL)
+	return New(cfg, &http.Client{Timeout: timeout}, tokens, fake.srv.URL)
 }
 
 func validToken() *oauth2.Token {
