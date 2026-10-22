@@ -17,6 +17,7 @@ import (
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
 	"github.com/mario595/leaderboard/internal/store"
+	"github.com/mario595/leaderboard/internal/webhook"
 )
 
 func main() {
@@ -75,20 +76,39 @@ func runServer() error {
 		return fmt.Errorf("STRAVA_CLIENT_SECRET is required to run the server")
 	}
 
+	if cfg.StravaVerifyToken == "" {
+		return fmt.Errorf("STRAVA_VERIFY_TOKEN is required to run the server")
+	}
+
 	logger, err := logging.New(os.Stdout, cfg.Env, cfg.LogLevel)
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
 	}
 	logger.Info("database ready", "path", cfg.DBPath)
+
+	if cfg.StravaSubscriptionID == 0 {
+		logger.Warn("STRAVA_SUBSCRIPTION_ID is not provided. Events will be rejected until it's set.")
+	}
+
 	oauthCfg := auth.NewOauthConfig(cfg.StravaClientID, cfg.StravaClientSecret, cfg.BaseURL)
 	userStore := store.NewUserStore(db)
+	eventStore := store.NewEventStore(db)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	secureCookies := cfg.Env == "prod"
 	sessions, stop := auth.NewSessionManager(db, secureCookies)
 	defer stop()
 	authHandler := auth.New(oauthCfg, userStore, sessions, logger, httpClient, secureCookies)
+	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, nil, logger)
 
-	router := httpapi.NewRouter(httpapi.Deps{Logger: logger, Auth: authHandler, Sessions: sessions, Users: userStore})
+	router := httpapi.NewRouter(
+		httpapi.Deps{
+			Logger:   logger,
+			Auth:     authHandler,
+			Sessions: sessions,
+			Users:    userStore,
+			Webhook:  wh,
+		},
+	)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
