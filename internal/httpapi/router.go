@@ -37,8 +37,8 @@ func NewRouter(deps Deps) http.Handler {
 
 	if deps.Users != nil {
 		r.Route("/api", func(r chi.Router) {
-			r.Use(requireAuth(deps.Sessions, deps.Logger))
-			r.Get("/me", meHandler(deps.Users, deps.Sessions, deps.Logger))
+			r.Use(requireAuth(deps.Sessions, deps.Users, deps.Logger))
+			r.Get("/me", meHandler(deps.Logger))
 		})
 	}
 

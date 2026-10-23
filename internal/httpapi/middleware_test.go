@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/mario595/leaderboard/internal/auth"
+	"github.com/mario595/leaderboard/internal/store"
 	"github.com/mario595/leaderboard/internal/testutil"
 )
 
@@ -134,10 +135,12 @@ func newAuthApp(t *testing.T) *authApp {
 	})
 	protected := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		app.protectedCalled = true
-		id, ok := userIDFromContext(r.Context())
-		_, _ = fmt.Fprintf(w, "%d %t", id, ok)
+		u, ok := userFromContext(r.Context())
+		_, _ = fmt.Fprintf(w, "%d %t", u.ID, ok)
 	})
-	mux.Handle("GET /protected", requireAuth(sessions, logger)(protected))
+	// The user of the session exists: these tests are about the session.
+	users := &fakeUserStore{user: store.User{ID: 42}}
+	mux.Handle("GET /protected", requireAuth(sessions, users, logger)(protected))
 
 	app.handler = sessions.LoadAndSave(mux)
 	return app
@@ -228,7 +231,7 @@ func TestRequireAuth_loggedInUser(t *testing.T) {
 	}
 }
 
-func TestUserIDFromContext(t *testing.T) {
+func TestUserFromContext(t *testing.T) {
 	// A key of another type, even with the same underlying shape, is a different key.
 	type otherKey struct{}
 
@@ -239,16 +242,18 @@ func TestUserIDFromContext(t *testing.T) {
 		wantOK bool
 	}{
 		{name: "not set", ctx: context.Background()},
-		{name: "set", ctx: context.WithValue(context.Background(), userIDKey{}, int64(7)), wantID: 7, wantOK: true},
-		{name: "wrong type", ctx: context.WithValue(context.Background(), userIDKey{}, "7")},
-		{name: "same value under another key", ctx: context.WithValue(context.Background(), otherKey{}, int64(7))},
+		{name: "set", ctx: context.WithValue(context.Background(), userKey{}, store.User{ID: 7}), wantID: 7, wantOK: true},
+		// The value is a store.User, not a pointer to one and not the bare ID.
+		{name: "pointer instead of value", ctx: context.WithValue(context.Background(), userKey{}, &store.User{ID: 7})},
+		{name: "bare ID", ctx: context.WithValue(context.Background(), userKey{}, int64(7))},
+		{name: "same value under another key", ctx: context.WithValue(context.Background(), otherKey{}, store.User{ID: 7})},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			id, ok := userIDFromContext(tc.ctx)
+			u, ok := userFromContext(tc.ctx)
 
-			testutil.AssertEqual(t, "id", tc.wantID, id)
+			testutil.AssertEqual(t, "id", tc.wantID, u.ID)
 			testutil.AssertEqual(t, "ok", tc.wantOK, ok)
 		})
 	}
