@@ -240,6 +240,9 @@ type builtClient struct {
 // returns the next result in order.
 type fakeClients struct {
 	mu      sync.Mutex
+	gate    chan struct{} // if set, Activity signals started and waits on it
+	started chan struct{}
+	ctxErr  error // ctx.Err() seen by the last Activity call, after the gate
 	results []fetchResult
 	fetches int
 	built   []builtClient
@@ -266,9 +269,14 @@ func (f *fakeClients) builtWith() []builtClient {
 
 type fakeClient struct{ clients *fakeClients }
 
-func (c fakeClient) Activity(_ context.Context, id int64) (strava.Activity, error) {
+func (c fakeClient) Activity(ctx context.Context, id int64) (strava.Activity, error) {
 	f := c.clients
+	if f.gate != nil {
+		f.started <- struct{}{}
+		<-f.gate
+	}
 	f.mu.Lock()
+	f.ctxErr = ctx.Err()
 	defer f.mu.Unlock()
 	if f.fetches >= len(f.results) {
 		return strava.Activity{}, errors.New("fakeClient: no result left")
@@ -281,6 +289,7 @@ func (c fakeClient) Activity(_ context.Context, id int64) (strava.Activity, erro
 // fakeQueue is an in-memory EventQueue (used from step 3 on).
 type fakeQueue struct {
 	mu      sync.Mutex
+	nextErr error // returned once by NextDue, then cleared
 	pending []store.Event
 	done    []int64
 	retried map[int64]time.Time
@@ -291,10 +300,32 @@ type fakeQueue struct {
 func (q *fakeQueue) NextDue(_ context.Context) (store.Event, bool, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if err := q.nextErr; err != nil {
+		q.nextErr = nil
+		return store.Event{}, false, err
+	}
 	if len(q.pending) == 0 {
 		return store.Event{}, false, nil
 	}
 	return q.pending[0], true, nil
+}
+
+func (q *fakeQueue) add(e store.Event) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.pending = append(q.pending, e)
+}
+
+func (q *fakeQueue) doneIDs() []int64 {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]int64(nil), q.done...)
+}
+
+func (q *fakeQueue) retriedCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.retried)
 }
 
 func (q *fakeQueue) remove(id int64) {
