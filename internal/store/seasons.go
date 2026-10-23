@@ -33,13 +33,21 @@ func NewSeasonStore(db *sql.DB) *SeasonStore {
 	}
 }
 
-// selectSeasonQuery finds one season that overlaps a date range. Its arguments
-// are the new season's end date, then its start date (both ranges are inclusive).
-const selectSeasonQuery = `
+// selectSeasonOverlappingQuery finds one season that overlaps a date range.
+// Its arguments are the range's end date, then its start date, as YYYY-MM-DD
+// (both inclusive). A single date is the range date..date.
+const selectSeasonOverlappingQuery = `
 		SELECT id, name, start_date, end_date, created_at
 		FROM seasons
 		WHERE start_date <= ? AND end_date >= ?
 		LIMIT 1;
+	`
+
+// selectSeasonByIDQuery finds a season by ID.
+const selectSeasonByIDQuery = `
+		SELECT id, name, start_date, end_date, created_at
+		FROM seasons
+		WHERE id = ?;
 	`
 
 // insertSeasonQuery inserts a season and returns the stored row.
@@ -72,7 +80,7 @@ func (st *SeasonStore) Create(ctx context.Context, s Season) (Season, error) {
 	}()
 
 	conflictSeason, err := scanSeason(tx.QueryRowContext(ctx,
-		selectSeasonQuery,
+		selectSeasonOverlappingQuery,
 		FormatDate(s.EndDate),
 		FormatDate(s.StartDate),
 	))
@@ -122,6 +130,34 @@ func (st *SeasonStore) List(ctx context.Context) ([]Season, error) {
 		return nil, fmt.Errorf("rows: %w", err)
 	}
 	return result, nil
+}
+
+// Current returns the season covering date. Only the calendar date counts,
+// not the time of day, and both season bounds are inclusive. It returns
+// ErrNotFound when no season covers the date.
+func (st *SeasonStore) Current(ctx context.Context, date time.Time) (Season, error) {
+	r := st.db.QueryRowContext(ctx, selectSeasonOverlappingQuery, FormatDate(date), FormatDate(date))
+	s, err := scanSeason(r)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Season{}, ErrNotFound
+	}
+	if err != nil {
+		return Season{}, fmt.Errorf("current season for date %s: %w", FormatDate(date), err)
+	}
+	return s, nil
+}
+
+// Get returns the season with the given ID, or ErrNotFound.
+func (st *SeasonStore) Get(ctx context.Context, id int64) (Season, error) {
+	r := st.db.QueryRowContext(ctx, selectSeasonByIDQuery, id)
+	s, err := scanSeason(r)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Season{}, ErrNotFound
+	}
+	if err != nil {
+		return Season{}, fmt.Errorf("get season %d: %w", id, err)
+	}
+	return s, nil
 }
 
 // scanSeason reads one season from a row selected with the columns
