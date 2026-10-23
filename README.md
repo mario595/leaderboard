@@ -14,12 +14,13 @@ Work in progress. What exists today:
 - The scoring rules below, as a tested Go package (`internal/scoring`)
 - Activity storage with points recomputed per user and day on every save or delete (`internal/activity`); not fed by Strava yet
 - A Strava API client that refreshes expired access tokens and saves the new ones, and fetches an activity with errors for not found, revoked access and rate limits (`internal/strava`); not called by the app yet
-- A Strava webhook endpoint that verifies the subscription and stores incoming events (`internal/webhook`); events are not processed yet
+- A Strava webhook endpoint that verifies the subscription and stores incoming events (`internal/webhook`)
+- A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: processing Strava activity events, the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -132,7 +133,7 @@ Create the subscription:
    ```
    The response contains the subscription `id`.
 3. Put the `id` in `.env` as `STRAVA_SUBSCRIPTION_ID` and restart the server.
-4. Edit an activity on Strava (changing its title is enough). The server logs the event and stores it in the `webhook_events` table with status `pending`.
+4. Edit an activity on Strava: change its title (Strava only sends updates for the title, sport type and privacy). The server stores the event, the worker fetches the activity and saves it with its points, and the event becomes `done`.
 
 `make strava-subscription` shows the current subscription and `make strava-unsubscribe ID=<id>` deletes it. While the server is down, Strava's deliveries fail and, after a few retries, are lost.
 

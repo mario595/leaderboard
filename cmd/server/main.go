@@ -9,15 +9,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/mario595/leaderboard/internal/activity"
 	"github.com/mario595/leaderboard/internal/auth"
 	"github.com/mario595/leaderboard/internal/config"
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
 	"github.com/mario595/leaderboard/internal/store"
+	"github.com/mario595/leaderboard/internal/strava"
 	"github.com/mario595/leaderboard/internal/webhook"
+	"github.com/mario595/leaderboard/internal/worker"
+
+	"golang.org/x/oauth2"
 )
 
 func main() {
@@ -93,12 +99,34 @@ func runServer() error {
 	oauthCfg := auth.NewOauthConfig(cfg.StravaClientID, cfg.StravaClientSecret, cfg.BaseURL)
 	userStore := store.NewUserStore(db)
 	eventStore := store.NewEventStore(db)
+	activityService := activity.NewService(db)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	secureCookies := cfg.Env == "prod"
-	sessions, stop := auth.NewSessionManager(db, secureCookies)
-	defer stop()
+	sessions, stopSessions := auth.NewSessionManager(db, secureCookies)
+	defer stopSessions()
 	authHandler := auth.New(oauthCfg, userStore, sessions, logger, httpClient, secureCookies)
-	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, nil, logger)
+	wake := make(chan struct{}, 1)
+
+	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, wake, logger)
+	api := strava.New(oauthCfg, httpClient, userStore, strava.DefaultBaseURL)
+	newClient := func(userID int64, tok *oauth2.Token) worker.ActivityFetcher {
+		return api.ForUser(userID, tok)
+	}
+	eventWorker := worker.New(eventStore, userStore, activityService, newClient, wake, logger)
+
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		if err := eventWorker.Run(workerCtx); err != nil {
+			logger.Error("worker stopped", "error", err)
+		}
+	})
+	logger.Info("worker started")
+	defer func() {
+		cancelWorker()
+		wg.Wait()
+		logger.Info("worker stopped")
+	}()
 
 	router := httpapi.NewRouter(
 		httpapi.Deps{
