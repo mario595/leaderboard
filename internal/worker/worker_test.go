@@ -65,7 +65,7 @@ func TestProcess(t *testing.T) {
 		{name: "save fails: returned", event: activityEvent("create"), fetches: []fetchResult{{a: ride}}, saveErr: errDB, wantErr: errDB, wantSaved: false, wantFetch: 1},
 		{
 			// #15 handles deauthorization; until then athlete events are done.
-			name: "athlete event: ignored", event: store.Event{ID: 1, ObjectType: "athlete", ObjectID: athleteID, AspectType: "update", OwnerID: athleteID, Updates: `{"authorized":"false"}`},
+			name: "athlete event: ignored", event: store.Event{ID: 1, ObjectType: "athlete", ObjectID: athleteID, AspectType: "update", OwnerID: athleteID, Updates: `{"profile":"changed"}`},
 			wantFetch: 0,
 		},
 		{
@@ -181,11 +181,16 @@ func newFixture(t *testing.T, fetches []fetchResult) *fixture {
 }
 
 type fakeUsers struct {
+	mu         sync.Mutex
 	byStravaID map[int64]store.User
 	err        error
+	deleteErr  error
+	deleted    []int64 // athletes passed to DeleteByStravaID
 }
 
 func (f *fakeUsers) GetByStravaID(_ context.Context, stravaID int64) (store.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.err != nil {
 		return store.User{}, f.err
 	}
@@ -194,6 +199,24 @@ func (f *fakeUsers) GetByStravaID(_ context.Context, stravaID int64) (store.User
 		return store.User{}, store.ErrNotFound
 	}
 	return u, nil
+}
+
+func (f *fakeUsers) DeleteByStravaID(_ context.Context, stravaID int64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteErr != nil {
+		return false, f.deleteErr
+	}
+	f.deleted = append(f.deleted, stravaID)
+	_, existed := f.byStravaID[stravaID]
+	delete(f.byStravaID, stravaID)
+	return existed, nil
+}
+
+func (f *fakeUsers) deletedAthletes() []int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int64(nil), f.deleted...)
 }
 
 type fakeActivities struct {
