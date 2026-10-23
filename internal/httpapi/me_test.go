@@ -183,6 +183,6 @@ func newMeApp(t *testing.T, users userGetter) *authApp {
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
 		sessions.Put(r.Context(), auth.SessionUserIDKey, int64(42))
 	})
-	mux.Handle("GET /api/me", requireAuth(sessions, logger)(meHandler(users, sessions, logger)))
+	mux.Handle("GET /api/me", requireAuth(sessions, users, logger)(meHandler(logger)))
 	return &authApp{handler: sessions.LoadAndSave(mux)}
 }

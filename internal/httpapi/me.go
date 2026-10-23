@@ -2,11 +2,9 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 
-	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/store"
 )
 
@@ -21,26 +19,17 @@ type meResponse struct {
 	LastName  string `json:"lastName"`
 }
 
-func meHandler(users userGetter, sessions *scs.SessionManager, logger *slog.Logger) http.HandlerFunc {
+// meHandler answers GET /api/me with the logged-in user, without tokens. It
+// must sit behind requireAuth, which puts the user in the context.
+func meHandler(logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, ok := userIDFromContext(r.Context())
+		u, ok := userFromContext(r.Context())
 		if !ok {
-			logger.Error("userID not found in Context")
-			writeError(w, logger, http.StatusUnauthorized, "unauthorized user")
+			logger.Error("no user in context: route not behind requireAuth")
+			writeError(w, logger, http.StatusInternalServerError, "internal error")
 			return
 		}
-		u, err := users.GetByID(r.Context(), id)
-		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				logger.Info("user not found. Destroying session", "userID", id)
-				_ = sessions.Destroy(r.Context())
-				writeError(w, logger, http.StatusUnauthorized, "unauthorized user")
-				return
-			}
-			logger.Error("error in getByID", "error", err, "userID", id)
-			writeError(w, logger, http.StatusInternalServerError, "error in /me")
-			return
-		}
+
 		writeJSON(
 			w,
 			logger,

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -174,6 +175,89 @@ func TestUpdateTokens_NotFound(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("UpdateTokens unknown user: got error %v, wanted ErrNotFound", err)
 	}
+}
+
+func TestDeleteByStravaID(t *testing.T) {
+	db := newTestDB(t)
+	users := NewUserStore(db)
+	activities := NewActivityStore(db)
+	events := NewEventStore(db)
+
+	// Two athletes with an activity and an event each.
+	const leaving, staying = int64(1001), int64(1002)
+	leavingID := createTestUser(t, db, leaving)
+	stayingID := createTestUser(t, db, staying)
+	upsertTestActivity(t, activities, 1, leavingID, "2026-10-15T07:00")
+	upsertTestActivity(t, activities, 2, stayingID, "2026-10-15T08:00")
+	for _, owner := range []int64{leaving, staying} {
+		if _, err := events.Insert(t.Context(), Event{
+			ObjectType: "activity", ObjectID: owner * 10, AspectType: "create",
+			OwnerID: owner, EventTime: time.Unix(1760521800, 0), Updates: "{}",
+		}); err != nil {
+			t.Fatalf("insert event for %d: %v", owner, err)
+		}
+	}
+
+	deleted, err := users.DeleteByStravaID(t.Context(), leaving)
+	if err != nil {
+		t.Fatalf("DeleteByStravaID: %v", err)
+	}
+	testutil.AssertEqual(t, "deleted", true, deleted)
+
+	// Everything of the leaving athlete is gone. The activity goes through
+	// ON DELETE CASCADE, which only works with the foreign_keys pragma on.
+	if _, err := users.GetByStravaID(t.Context(), leaving); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetByStravaID after delete: got error %v, wanted ErrNotFound", err)
+	}
+	testutil.AssertEqual(t, "leaving athlete's activities", 0, countRows(t, db, "activities", "user_id", leavingID))
+	testutil.AssertEqual(t, "leaving athlete's events", 0, countRows(t, db, "webhook_events", "owner_id", leaving))
+
+	// Positive control: the other athlete keeps everything.
+	if _, err := users.GetByStravaID(t.Context(), staying); err != nil {
+		t.Errorf("GetByStravaID for the other athlete: %v", err)
+	}
+	testutil.AssertEqual(t, "other athlete's activities", 1, countRows(t, db, "activities", "user_id", stayingID))
+	testutil.AssertEqual(t, "other athlete's events", 1, countRows(t, db, "webhook_events", "owner_id", staying))
+
+	// Repeated (Strava retry) or never a user: nothing to delete, no error.
+	deleted, err = users.DeleteByStravaID(t.Context(), leaving)
+	if err != nil {
+		t.Fatalf("second DeleteByStravaID: %v", err)
+	}
+	testutil.AssertEqual(t, "deleted twice", false, deleted)
+	deleted, err = users.DeleteByStravaID(t.Context(), 999)
+	if err != nil {
+		t.Fatalf("DeleteByStravaID for an unknown athlete: %v", err)
+	}
+	testutil.AssertEqual(t, "deleted unknown", false, deleted)
+
+	// Events of a non-user (the webhook stores them, #13) are removed too,
+	// but no user was deleted: deleted must say so.
+	const neverUser = int64(1003)
+	if _, err := events.Insert(t.Context(), Event{
+		ObjectType: "activity", ObjectID: 30, AspectType: "create",
+		OwnerID: neverUser, EventTime: time.Unix(1760521800, 0), Updates: "{}",
+	}); err != nil {
+		t.Fatalf("insert event for a non-user: %v", err)
+	}
+	deleted, err = users.DeleteByStravaID(t.Context(), neverUser)
+	if err != nil {
+		t.Fatalf("DeleteByStravaID for a non-user with events: %v", err)
+	}
+	testutil.AssertEqual(t, "deleted non-user with events", false, deleted)
+	testutil.AssertEqual(t, "non-user's events", 0, countRows(t, db, "webhook_events", "owner_id", neverUser))
+}
+
+// countRows counts the rows of table whose column equals value. table and
+// column come from the test, never from input.
+func countRows(t *testing.T, db *sql.DB, table, column string, value int64) int {
+	t.Helper()
+	var n int
+	query := "SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ?"
+	if err := db.QueryRowContext(t.Context(), query, value).Scan(&n); err != nil {
+		t.Fatalf("count %s: %v", table, err)
+	}
+	return n
 }
 
 func newTestStore(t *testing.T) *UserStore {

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,9 +22,11 @@ type EventQueue interface {
 	MarkFailed(ctx context.Context, id int64, errMsg string) error
 }
 
-// UserFinder finds the user owning an event; *store.UserStore satisfies it.
-type UserFinder interface {
+// Users finds the user owning an event and deletes athletes who
+// deauthorize; *store.UserStore satisfies it.
+type Users interface {
 	GetByStravaID(ctx context.Context, stravaID int64) (store.User, error)
+	DeleteByStravaID(ctx context.Context, stravaID int64) (bool, error)
 }
 
 // ActivitySaver writes activities and recomputes their days;
@@ -50,7 +53,7 @@ type ClientFunc func(userID int64, tok *oauth2.Token) ActivityFetcher
 // state and saves or deletes it, whatever the event's aspect type.
 type Worker struct {
 	events     EventQueue
-	users      UserFinder
+	users      Users
 	activities ActivitySaver
 	newClient  ClientFunc
 	wake       <-chan struct{}
@@ -62,7 +65,7 @@ type Worker struct {
 
 // New returns a Worker. wake signals new events; the worker also polls every
 // minute for retries that become due.
-func New(events EventQueue, users UserFinder, activities ActivitySaver, newClient ClientFunc, wake <-chan struct{}, logger *slog.Logger) *Worker {
+func New(events EventQueue, users Users, activities ActivitySaver, newClient ClientFunc, wake <-chan struct{}, logger *slog.Logger) *Worker {
 	return &Worker{
 		events:       events,
 		users:        users,
@@ -80,21 +83,49 @@ func New(events EventQueue, users UserFinder, activities ActivitySaver, newClien
 // returned error decides how handle marks the event.
 func (w *Worker) process(ctx context.Context, e store.Event) error {
 	w.logger.Info("processing event", "id", e.ID, "object_type", e.ObjectType, "aspect_type", e.AspectType, "owner_id", e.OwnerID, "object_id", e.ObjectID)
-	if e.ObjectType != "activity" {
+
+	switch e.ObjectType {
+	case "athlete":
+		return w.processAthleteEvent(ctx, e)
+	case "activity":
+		return w.processActivityEvent(ctx, e.ObjectID, e.OwnerID)
+	default:
 		return nil
 	}
-	u, err := w.users.GetByStravaID(ctx, e.OwnerID)
+}
+
+// processAthleteEvent deletes everything stored for an athlete who
+// deauthorized the app (updates {"authorized":"false"}), user or not. Other
+// athlete updates are ignored, and so are updates that cannot be decoded:
+// retrying would not fix them, so they are logged instead.
+func (w *Worker) processAthleteEvent(ctx context.Context, e store.Event) error {
+	var u struct {
+		Authorized string `json:"authorized"`
+	}
+	if err := json.Unmarshal([]byte(e.Updates), &u); err != nil {
+		w.logger.Warn("cannot decode athlete updates", "event_id", e.ID, "updates", e.Updates, "error", err)
+		return nil
+	}
+	if u.Authorized == "false" {
+		deleted, err := w.users.DeleteByStravaID(ctx, e.ObjectID)
+		if err != nil {
+			return fmt.Errorf("delete athlete %d: %w", e.ObjectID, err)
+		}
+		w.logger.Info("athlete deauthorized", "athlete_id", e.ObjectID, "deleted", deleted)
+	}
+	return nil
+}
+
+// processActivityEvent brings one activity in line with Strava, using its
+// owner's token. Events of athletes who are not users are ignored.
+func (w *Worker) processActivityEvent(ctx context.Context, activityID int64, athleteID int64) error {
+	u, err := w.users.GetByStravaID(ctx, athleteID)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("get by strava ID %d: %w", e.OwnerID, err)
+		return fmt.Errorf("get by strava ID %d: %w", athleteID, err)
 	}
-
-	return w.processActivityEvent(ctx, e.ObjectID, u)
-}
-
-func (w *Worker) processActivityEvent(ctx context.Context, activityID int64, u store.User) error {
 	tok := &oauth2.Token{
 		AccessToken:  u.AccessToken,
 		RefreshToken: u.RefreshToken,

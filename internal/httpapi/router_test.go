@@ -3,12 +3,14 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/mario595/leaderboard/internal/auth"
@@ -84,6 +86,50 @@ func TestRouter_apiMeForALoggedInUser(t *testing.T) {
 	// Logged in, an unknown API path is a plain 404.
 	status, _, _, _ = app.do(t, "/api/nothing-here", cookie)
 	testutil.AssertEqual(t, "status of an unknown API path", http.StatusNotFound, status)
+}
+
+func TestRouter_sessionOfDeletedUser(t *testing.T) {
+	users := &fakeUserStore{user: store.User{ID: 42, StravaID: 4242, FirstName: "Ada"}}
+	app := newAPIApp(t, users)
+	_, _, _, set := app.do(t, "/test-login")
+	cookie := sessionCookie(t, set)
+
+	// Positive control: the session works while the user exists.
+	status, _, _, _ := app.do(t, "/api/me", cookie)
+	testutil.AssertEqual(t, "status before the deletion", http.StatusOK, status)
+
+	// The user deauthorizes and is deleted (#15). Every API path, not only
+	// /api/me, must stop serving them: an unknown path gives 401, not 404.
+	users.err = store.ErrNotFound
+	status, _, _, set = app.do(t, "/api/nothing-here", cookie)
+	testutil.AssertEqual(t, "status after the deletion", http.StatusUnauthorized, status)
+
+	// The session is destroyed, not just refused: the browser is told to
+	// drop the cookie...
+	if c := sessionCookie(t, set); c.MaxAge >= 0 && c.Expires.After(time.Now()) {
+		t.Errorf("session cookie not cleared: %+v", c)
+	}
+	// ...and the old token no longer works, even if the user came back.
+	users.err = nil
+	status, _, _, _ = app.do(t, "/api/me", cookie)
+	testutil.AssertEqual(t, "status with the destroyed session", http.StatusUnauthorized, status)
+}
+
+func TestRouter_userStoreErrorIsNot401(t *testing.T) {
+	users := &fakeUserStore{user: store.User{ID: 42, StravaID: 4242, FirstName: "Ada"}}
+	app := newAPIApp(t, users)
+	_, _, _, set := app.do(t, "/test-login")
+	cookie := sessionCookie(t, set)
+
+	// A database outage must not look like a logout.
+	users.err = errors.New("database is locked")
+	status, _, _, _ := app.do(t, "/api/nothing-here", cookie)
+	testutil.AssertEqual(t, "status during the outage", http.StatusInternalServerError, status)
+
+	// The session survived the outage.
+	users.err = nil
+	status, _, _, _ = app.do(t, "/api/me", cookie)
+	testutil.AssertEqual(t, "status after the outage", http.StatusOK, status)
 }
 
 func TestRouter_noAPIWithoutUserStore(t *testing.T) {
