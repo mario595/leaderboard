@@ -42,6 +42,16 @@ const updateTokensQuery = `
 	WHERE id = ?;
 `
 
+const deleteUserByStravaIDQuery = `
+	DELETE FROM users
+	WHERE strava_id = ?;
+`
+
+const deleteEventsByOwnerQuery = `
+	DELETE FROM webhook_events
+	WHERE owner_id = ?;
+`
+
 // User is a Strava user
 type User struct {
 	ID             int64
@@ -138,6 +148,36 @@ func (s *UserStore) UpdateTokens(ctx context.Context, userID int64, accessToken,
 		return ErrNotFound
 	}
 	return nil
+}
+
+// DeleteByStravaID deletes everything stored for the athlete, in one
+// transaction: their webhook events, then the user row, whose activities go
+// with it through ON DELETE CASCADE. Used when the athlete deauthorizes the
+// app. deleted reports whether a user existed; deleting an unknown athlete
+// (a repeated event, or someone who never was a user) is not an error.
+func (s *UserStore) DeleteByStravaID(ctx context.Context, stravaID int64) (deleted bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin transaction: delete athlete %d: %w", stravaID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx, deleteEventsByOwnerQuery, stravaID)
+	if err != nil {
+		return false, fmt.Errorf("delete webhook events for athlete %d: %w", stravaID, err)
+	}
+
+	r, err := tx.ExecContext(ctx, deleteUserByStravaIDQuery, stravaID)
+	if err != nil {
+		return false, fmt.Errorf("delete athlete %d: %w", stravaID, err)
+	}
+	rows, err := r.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete athlete %d: %w", stravaID, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("delete athlete %d: %w", stravaID, err)
+	}
+	return rows > 0, nil
 }
 
 func scanUserRow(r rowScanner) (User, error) {
