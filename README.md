@@ -16,6 +16,7 @@ Work in progress. What exists today:
 - A Strava API client that refreshes expired access tokens and saves the new ones, and fetches an activity with errors for not found, revoked access and rate limits (`internal/strava`); not called by the app yet
 - A Strava webhook endpoint that verifies the subscription and stores incoming events (`internal/webhook`)
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
+- Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
@@ -163,6 +164,16 @@ internal/store/        SQLite access, embedded SQL migrations, users and seasons
 ### Stack
 
 Go with the standard library's `net/http` and the [chi](https://github.com/go-chi/chi) router, SQLite through `database/sql` (pure-Go driver [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)) with [goose](https://github.com/pressly/goose) migrations, and [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) for Strava. A React frontend is planned.
+
+## Your data
+
+For each member the app stores:
+
+- the Strava profile basics (athlete ID, first and last name) and the OAuth tokens that let it read activities;
+- for each counted activity: sport type, local start time, moving time, distance, workout type, description (only to find the `#competition` tag) and the points awarded;
+- the webhook events Strava sends about them, until processed.
+
+Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all of it: Strava sends a deauthorization event, and the app removes the member, their activities and their events in one transaction. Any open session of that member stops working on its next request. Signing in again starts from scratch.
 
 ## Security notes
 
