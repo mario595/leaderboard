@@ -34,7 +34,7 @@ type Event struct {
 	// NextAttemptAt is when the event should next be handled again.
 	NextAttemptAt time.Time
 	// Attempts is the number of previous attempts for this event.
-	Attempts int64
+	Attempts int
 }
 
 // EventStore persists webhook events in SQLite.
