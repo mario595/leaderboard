@@ -78,9 +78,10 @@ func New(events EventQueue, users Users, activities ActivitySaver, newClient Cli
 	}
 }
 
-// process brings one event's activity in line with Strava. Events that are
-// not about activities, or whose owner is not a user, are ignored (nil). The
-// returned error decides how handle marks the event.
+// process handles one event: an activity event brings the activity in line
+// with Strava (ignored when its owner is not a user); an athlete event
+// deletes the athlete when they deauthorized; anything else is ignored (nil).
+// The returned error decides how handle marks the event.
 func (w *Worker) process(ctx context.Context, e store.Event) error {
 	w.logger.Info("processing event", "id", e.ID, "object_type", e.ObjectType, "aspect_type", e.AspectType, "owner_id", e.OwnerID, "object_id", e.ObjectID)
 
