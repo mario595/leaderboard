@@ -318,6 +318,92 @@ func TestActivityStore_deletingUserDeletesActivities(t *testing.T) {
 	}
 }
 
+func TestActivityStore_listForUser(t *testing.T) {
+	s, db, userID := newTestActivityStore(t)
+	otherUserID := createTestUser(t, db, 43)
+
+	// Inserted out of order. 102 and 103 start in the same minute: the ID
+	// breaks the tie (103 first, newest-first order is by ID descending too).
+	upsertTestActivity(t, s, 103, userID, "2026-10-15T07:00")
+	upsertTestActivity(t, s, 101, userID, "2026-10-01T07:00")
+	upsertTestActivity(t, s, 105, userID, "2026-12-31T23:59") // last day of the range
+	upsertTestActivity(t, s, 102, userID, "2026-10-15T07:00")
+	upsertTestActivity(t, s, 104, userID, "2026-11-20T18:00")
+	// Positive controls for the WHERE clause: each must be left out.
+	upsertTestActivity(t, s, 106, userID, "2027-01-01T00:00")      // after the range
+	upsertTestActivity(t, s, 107, userID, "2026-08-31T23:59")      // before the range
+	upsertTestActivity(t, s, 201, otherUserID, "2026-10-20T07:00") // another user
+	from, to := date(t, "2026-09-01"), date(t, "2026-12-31")
+
+	// All at once: newest first, ties by ID descending.
+	all, err := s.ListForUser(t.Context(), userID, from, to, nil, 100)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	testutil.AssertEqual(t, "all, newest first", true, slices.Equal([]int64{105, 104, 103, 102, 101}, activityIDs(all)))
+
+	// Page by page, each page continuing after the last row of the previous one.
+	var pages [][]int64
+	var after *ActivityCursor
+	for range 10 { // a bug that never ends the loop fails instead of hanging
+		page, err := s.ListForUser(t.Context(), userID, from, to, after, 2)
+		if err != nil {
+			t.Fatalf("ListForUser page %d: %v", len(pages)+1, err)
+		}
+		pages = append(pages, activityIDs(page))
+		if len(page) < 2 {
+			break
+		}
+		last := page[len(page)-1]
+		after = &ActivityCursor{StartLocal: last.StartLocal, StravaID: last.StravaID}
+	}
+	want := [][]int64{{105, 104}, {103, 102}, {101}}
+	if !slices.EqualFunc(want, pages, slices.Equal[[]int64]) {
+		t.Errorf("pages: got %v, wanted %v", pages, want)
+	}
+
+	// A cursor in the middle of a tie: after 103 comes 102, at the same time.
+	page, err := s.ListForUser(t.Context(), userID, from, to,
+		&ActivityCursor{StartLocal: mustParseStart(t, "2026-10-15T07:00"), StravaID: 103}, 10)
+	if err != nil {
+		t.Fatalf("ListForUser after a tie: %v", err)
+	}
+	testutil.AssertEqual(t, "after 103", true, slices.Equal([]int64{102, 101}, activityIDs(page)))
+
+	// Rows are fully scanned.
+	testutil.AssertEqual(t, "UserID", userID, all[0].UserID)
+	testutil.AssertEqual(t, "MovingTime", 45*time.Minute, all[0].MovingTime)
+}
+
+func TestActivityStore_listForUserEmpty(t *testing.T) {
+	s, _, userID := newTestActivityStore(t)
+
+	got, err := s.ListForUser(t.Context(), userID, date(t, "2026-09-01"), date(t, "2026-12-31"), nil, 50)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("ListForUser with no activities: got %#v, wanted an empty non-nil slice", got)
+	}
+}
+
+func activityIDs(as []Activity) []int64 {
+	ids := make([]int64, len(as))
+	for i, a := range as {
+		ids[i] = a.StravaID
+	}
+	return ids
+}
+
+func mustParseStart(t *testing.T, s string) time.Time {
+	t.Helper()
+	v, err := time.Parse("2006-01-02T15:04", s)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return v
+}
+
 // newTestActivityStore returns an ActivityStore on a fresh database, the
 // database itself (for direct SQL in tests), and the ID of a stored user that
 // activities can reference.

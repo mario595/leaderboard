@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -50,6 +51,21 @@ func (a Activity) Day() string {
 type ActivityStore struct {
 	db  DBTX
 	now func() time.Time
+}
+
+// ActivityCursor is a position in ListForUser's order (newest first): the next
+// page holds the activities that come after it in that order, that is, those
+// that started earlier, or at the same time with a lower Strava ID.
+type ActivityCursor struct {
+	StartLocal time.Time
+	StravaID   int64
+}
+
+// defaultActivityCursor comes before every real activity in ListForUser's
+// order, so the first page needs no separate query.
+var defaultActivityCursor = ActivityCursor{
+	StartLocal: time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
+	StravaID:   math.MaxInt64,
 }
 
 // NewActivityStore returns an ActivityStore that runs its queries on db.
@@ -109,6 +125,19 @@ const setPointsQuery = `
 const deleteActivityQuery = `
 	DELETE FROM activities
 	WHERE strava_id = ?;
+`
+
+// listForUserQuery returns one page of a user's activities in a day range,
+// newest first. The row-value comparison and the ORDER BY use the same key, in
+// the same direction: the page starts right after the cursor.
+const listForUserQuery = `
+	SELECT strava_id, user_id, sport_type, start_local, moving_time, distance, workout_type, description, points, created_at, updated_at
+	FROM activities
+	WHERE user_id = ?
+		AND  day BETWEEN ? AND ?
+		AND (start_local, strava_id) < (?, ?)
+	ORDER BY start_local DESC, strava_id DESC
+	LIMIT ?;
 `
 
 // Upsert inserts a, or updates the stored activity with the same StravaID,
@@ -199,6 +228,47 @@ func (s *ActivityStore) Delete(ctx context.Context, stravaID int64) error {
 	}
 
 	return nil
+}
+
+// ListForUser returns up to limit activities of the user whose local day lies
+// between from and to (both inclusive), newest first, ties broken by Strava ID
+// descending. after is the last activity of the previous page, or nil for the
+// first page. Keyset pagination: rows arriving between two calls never shift
+// the pages. Returns an empty, non-nil slice when nothing matches.
+func (s *ActivityStore) ListForUser(ctx context.Context, userID int64, from, to time.Time, after *ActivityCursor, limit int) ([]Activity, error) {
+	cursor := defaultActivityCursor
+	if after != nil {
+		cursor = *after
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		listForUserQuery,
+		userID,
+		FormatDate(from),
+		FormatDate(to),
+		cursor.StartLocal.Format(startLocalLayout),
+		cursor.StravaID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list activities of user %d: %w", userID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := []Activity{}
+	for rows.Next() {
+		r, err := scanActivityRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list activities of user %d: %w", userID, err)
+		}
+		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list activities of user %d: %w", userID, err)
+	}
+
+	return result, nil
+
 }
 
 // scanActivityRow scans one row in the column order of upsertActivityQuery's
