@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
@@ -13,11 +14,13 @@ import (
 )
 
 type Deps struct {
-	Logger   *slog.Logger
-	Auth     *auth.Handler
-	Sessions *scs.SessionManager
-	Users    userGetter
-	Webhook  *webhook.Handler
+	Logger    *slog.Logger
+	Auth      *auth.Handler
+	Sessions  *scs.SessionManager
+	Users     userGetter
+	Webhook   *webhook.Handler
+	Seasons   seasonFinder
+	Standings standingsQuerier
 }
 
 // NewRouter builds the http router with all the application routes.
@@ -39,6 +42,9 @@ func NewRouter(deps Deps) http.Handler {
 		r.Route("/api", func(r chi.Router) {
 			r.Use(requireAuth(deps.Sessions, deps.Users, deps.Logger))
 			r.Get("/me", meHandler(deps.Logger))
+			if deps.Seasons != nil && deps.Standings != nil {
+				r.Get("/leaderboard", leaderboardHandler(deps.Seasons, deps.Standings, time.Now, deps.Logger))
+			}
 		})
 	}
 

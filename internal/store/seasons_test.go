@@ -119,6 +119,74 @@ func TestSeasonStore_overlap(t *testing.T) {
 	}
 }
 
+func TestSeasonStore_current(t *testing.T) {
+	st := newTestSeasonStore(t)
+	summer := createTestSeason(t, st, "Summer 2026", "2026-06-01", "2026-08-31")
+	autumn := createTestSeason(t, st, "Autumn 2026", "2026-09-01", "2026-12-31")
+
+	testCases := []struct {
+		name   string
+		date   string
+		wantID int64 // 0: no season
+	}{
+		{name: "inside a season", date: "2026-10-15", wantID: autumn.ID},
+		// Both bounds are inclusive (#6).
+		{name: "first day", date: "2026-09-01", wantID: autumn.ID},
+		{name: "last day", date: "2026-08-31", wantID: summer.ID},
+		{name: "before every season", date: "2026-05-31"},
+		{name: "after every season", date: "2027-01-01"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := st.Current(t.Context(), date(t, tc.date))
+			if tc.wantID == 0 {
+				if !errors.Is(err, ErrNotFound) {
+					t.Errorf("Current(%s): got %+v, %v; wanted ErrNotFound", tc.date, got, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Current(%s): %v", tc.date, err)
+			}
+			testutil.AssertEqual(t, "season ID", tc.wantID, got.ID)
+		})
+	}
+
+	// A time late in the day still belongs to that date.
+	late := date(t, "2026-08-31").Add(23*time.Hour + 59*time.Minute)
+	got, err := st.Current(t.Context(), late)
+	if err != nil {
+		t.Fatalf("Current(%v): %v", late, err)
+	}
+	testutil.AssertEqual(t, "season at 23:59 on the last day", summer.ID, got.ID)
+}
+
+func TestSeasonStore_get(t *testing.T) {
+	st := newTestSeasonStore(t)
+	autumn := createTestSeason(t, st, "Autumn 2026", "2026-09-01", "2026-12-31")
+
+	got, err := st.Get(t.Context(), autumn.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	testutil.AssertEqual(t, "Name", "Autumn 2026", got.Name)
+	testutil.AssertEqual(t, "StartDate", "2026-09-01", FormatDate(got.StartDate))
+	testutil.AssertEqual(t, "EndDate", "2026-12-31", FormatDate(got.EndDate))
+
+	if _, err := st.Get(t.Context(), autumn.ID+1); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Get unknown season: got error %v, wanted ErrNotFound", err)
+	}
+}
+
+func createTestSeason(t *testing.T, st *SeasonStore, name, start, end string) Season {
+	t.Helper()
+	s, err := st.Create(t.Context(), Season{Name: name, StartDate: date(t, start), EndDate: date(t, end)})
+	if err != nil {
+		t.Fatalf("create season %q: %v", name, err)
+	}
+	return s
+}
+
 func newTestSeasonStore(t *testing.T) *SeasonStore {
 	t.Helper()
 	return NewSeasonStore(newTestDB(t))

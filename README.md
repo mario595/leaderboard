@@ -17,11 +17,12 @@ Work in progress. What exists today:
 - A Strava webhook endpoint that verifies the subscription and stores incoming events (`internal/webhook`)
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
+- A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: the leaderboard and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: the personal activity list and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -98,6 +99,7 @@ curl localhost:8080/healthz
 | `GET /auth/strava/callback` | public | Strava redirects here; creates the session |
 | `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
 | `GET /api/me` | signed in | The current user, without any token |
+| `GET /api/leaderboard` | signed in | Ranking for the season covering today (UTC date); `?season=<id>` for another season. Every member is listed, with 0 points if they have none; ties share a rank (1, 2, 2, 4). `404` when no season covers today. |
 | `GET /webhook/strava` | public | Strava's subscription check: echoes the challenge if the verify token matches |
 | `POST /webhook/strava` | public | Strava webhook events; stored, then processed in the background |
 
