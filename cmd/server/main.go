@@ -130,11 +130,13 @@ func runServer() error {
 
 	router := httpapi.NewRouter(
 		httpapi.Deps{
-			Logger:   logger,
-			Auth:     authHandler,
-			Sessions: sessions,
-			Users:    userStore,
-			Webhook:  wh,
+			Logger:    logger,
+			Auth:      authHandler,
+			Sessions:  sessions,
+			Users:     userStore,
+			Webhook:   wh,
+			Seasons:   store.NewSeasonStore(db),
+			Standings: store.NewActivityStore(db),
 		},
 	)
 

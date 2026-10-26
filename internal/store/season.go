@@ -50,3 +50,10 @@ func truncateToDate(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
+
+// String returns a string representation of a season
+// String formats the season as #ID "Name" (start to end), without a trailing
+// newline; fmt and slog use it for %s, %v and Println.
+func (s Season) String() string {
+	return fmt.Sprintf("#%d %q (%s to %s)", s.ID, s.Name, FormatDate(s.StartDate), FormatDate(s.EndDate))
+}

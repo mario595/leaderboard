@@ -58,7 +58,7 @@ func createCommand(ctx context.Context, st *store.SeasonStore, args []string, st
 		return fmt.Errorf("create season: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(stdout, "created %s", formatSeason(s))
+	_, _ = fmt.Fprintln(stdout, "created", s)
 
 	return nil
 }
@@ -74,12 +74,8 @@ func listCommand(ctx context.Context, st *store.SeasonStore, _ []string, stdout 
 	}
 
 	for _, s := range seasons {
-		_, _ = fmt.Fprint(stdout, formatSeason(s))
+		_, _ = fmt.Fprintln(stdout, s)
 	}
 
 	return nil
-}
-
-func formatSeason(s store.Season) string {
-	return fmt.Sprintf("#%d %q (%s to %s)\n", s.ID, s.Name, store.FormatDate(s.StartDate), store.FormatDate(s.EndDate))
 }

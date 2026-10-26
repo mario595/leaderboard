@@ -132,6 +132,35 @@ func TestRouter_userStoreErrorIsNot401(t *testing.T) {
 	testutil.AssertEqual(t, "status after the outage", http.StatusOK, status)
 }
 
+func TestRouter_leaderboard(t *testing.T) {
+	users := &fakeUserStore{user: store.User{ID: 42, FirstName: "Ada"}}
+	sessions := scs.New()
+	router := NewRouter(Deps{
+		Logger:    slog.New(slog.DiscardHandler),
+		Sessions:  sessions,
+		Users:     users,
+		Seasons:   &fakeSeasons{current: store.Season{ID: 3, Name: "Autumn 2026"}},
+		Standings: &fakeStandings{rows: []store.Standing{{UserID: 42, FirstName: "Ada", Points: 6}}},
+	})
+	outer := http.NewServeMux()
+	outer.Handle("GET /test-login", sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessions.Put(r.Context(), auth.SessionUserIDKey, int64(42))
+	})))
+	outer.Handle("/", router)
+	app := &authApp{handler: outer}
+
+	// Behind requireAuth: anonymous visitors get 401.
+	status, _, _, _ := app.do(t, "/api/leaderboard")
+	testutil.AssertEqual(t, "status without a session", http.StatusUnauthorized, status)
+
+	_, _, _, set := app.do(t, "/test-login")
+	status, body, _, _ := app.do(t, "/api/leaderboard", sessionCookie(t, set))
+	testutil.AssertEqual(t, "status with a session", http.StatusOK, status)
+	if !strings.Contains(body, `"points":6`) {
+		t.Errorf("body %s does not contain the standings", body)
+	}
+}
+
 func TestRouter_noAPIWithoutUserStore(t *testing.T) {
 	app := newAPIApp(t, nil)
 
