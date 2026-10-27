@@ -128,15 +128,17 @@ func runServer() error {
 		logger.Info("worker stopped")
 	}()
 
+	activityStore := store.NewActivityStore(db)
 	router := httpapi.NewRouter(
 		httpapi.Deps{
-			Logger:    logger,
-			Auth:      authHandler,
-			Sessions:  sessions,
-			Users:     userStore,
-			Webhook:   wh,
-			Seasons:   store.NewSeasonStore(db),
-			Standings: store.NewActivityStore(db),
+			Logger:     logger,
+			Auth:       authHandler,
+			Sessions:   sessions,
+			Users:      userStore,
+			Webhook:    wh,
+			Seasons:    store.NewSeasonStore(db),
+			Standings:  activityStore,
+			Activities: activityStore,
 		},
 	)
 

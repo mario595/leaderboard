@@ -161,6 +161,35 @@ func TestRouter_leaderboard(t *testing.T) {
 	}
 }
 
+func TestRouter_myActivities(t *testing.T) {
+	users := &fakeUserStore{user: store.User{ID: 42, FirstName: "Ada"}}
+	lister := &fakeLister{rows: []store.Activity{}}
+	sessions := scs.New()
+	router := NewRouter(Deps{
+		Logger:     slog.New(slog.DiscardHandler),
+		Sessions:   sessions,
+		Users:      users,
+		Seasons:    &fakeSeasons{current: store.Season{ID: 3, Name: "Autumn 2026"}},
+		Standings:  &fakeStandings{},
+		Activities: lister,
+	})
+	outer := http.NewServeMux()
+	outer.Handle("GET /test-login", sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessions.Put(r.Context(), auth.SessionUserIDKey, int64(42))
+	})))
+	outer.Handle("/", router)
+	app := &authApp{handler: outer}
+
+	status, _, _, _ := app.do(t, "/api/me/activities")
+	testutil.AssertEqual(t, "status without a session", http.StatusUnauthorized, status)
+
+	_, _, _, set := app.do(t, "/test-login")
+	status, _, _, _ = app.do(t, "/api/me/activities", sessionCookie(t, set))
+	testutil.AssertEqual(t, "status with a session", http.StatusOK, status)
+	// Always the session's user: there is no parameter to ask for another.
+	testutil.AssertEqual(t, "user listed", int64(42), lister.userID)
+}
+
 func TestRouter_noAPIWithoutUserStore(t *testing.T) {
 	app := newAPIApp(t, nil)
 
