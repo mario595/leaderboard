@@ -3,10 +3,8 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/mario595/leaderboard/internal/store"
@@ -21,25 +19,10 @@ type standingResponse struct {
 	Points    int    `json:"points"`
 }
 
-// seasonResponse is the season part of the leaderboard response; dates are
-// YYYY-MM-DD, both inclusive.
-type seasonResponse struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	StartDate string `json:"startDate"`
-	EndDate   string `json:"endDate"`
-}
-
 // leaderboardResponse is the body of GET /api/leaderboard.
 type leaderboardResponse struct {
 	Season    seasonResponse     `json:"season"`
 	Standings []standingResponse `json:"standings"`
-}
-
-// seasonFinder looks up seasons; *store.SeasonStore satisfies it.
-type seasonFinder interface {
-	Current(ctx context.Context, date time.Time) (store.Season, error)
-	Get(ctx context.Context, id int64) (store.Season, error)
 }
 
 // standingsQuerier sums points per member over a date range;
@@ -61,18 +44,7 @@ func leaderboardHandler(seasons seasonFinder, standings standingsQuerier, now fu
 		seasonParam := r.URL.Query().Get("season")
 		season, err := selectedSeason(r.Context(), seasons, now, seasonParam)
 		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				logger.Info("season not found", "error", err, "season_param", seasonParam)
-				writeError(w, logger, http.StatusNotFound, "season not found")
-				return
-			}
-			if errors.Is(err, errInvalidSeasonParam) {
-				logger.Info("invalid season", "error", err, "season_param", seasonParam)
-				writeError(w, logger, http.StatusBadRequest, "invalid season")
-				return
-			}
-			logger.Error("fetching season", "error", err, "season_param", seasonParam)
-			writeError(w, logger, http.StatusInternalServerError, "internal error")
+			writeSeasonError(w, logger, err, seasonParam)
 			return
 		}
 		stndngs, err := standings.Standings(r.Context(), season.StartDate, season.EndDate)
@@ -83,44 +55,11 @@ func leaderboardHandler(seasons seasonFinder, standings standingsQuerier, now fu
 		}
 
 		lr := leaderboardResponse{
-			Season: seasonResponse{
-				ID:        season.ID,
-				Name:      season.Name,
-				StartDate: store.FormatDate(season.StartDate),
-				EndDate:   store.FormatDate(season.EndDate),
-			},
+			Season:    newSeasonResponse(season),
 			Standings: rank(stndngs),
 		}
 		writeJSON(w, logger, http.StatusOK, lr)
 	}
-}
-
-// selectedSeason returns the season the request asks for: the one covering
-// now's UTC date when seasonParam is empty, otherwise the season with that
-// ID. A seasonParam that is not a positive integer gives
-// errInvalidSeasonParam; a missing season gives an error wrapping
-// store.ErrNotFound.
-func selectedSeason(ctx context.Context, seasons seasonFinder, now func() time.Time, seasonParam string) (store.Season, error) {
-	if seasonParam == "" {
-		s, err := seasons.Current(ctx, now().UTC())
-		if err != nil {
-			return store.Season{}, fmt.Errorf("selected season (current): %w", err)
-		}
-		return s, nil
-	}
-	seasonID, err := strconv.ParseInt(seasonParam, 10, 64)
-	if err != nil {
-		return store.Season{}, errInvalidSeasonParam
-	}
-	if seasonID <= 0 {
-		return store.Season{}, errInvalidSeasonParam
-	}
-	s, err := seasons.Get(ctx, seasonID)
-	if err != nil {
-		return store.Season{}, fmt.Errorf("selected season (%d): %w", seasonID, err)
-	}
-
-	return s, nil
 }
 
 // rank turns standings into leaderboard rows with standard competition

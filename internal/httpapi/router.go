@@ -14,13 +14,14 @@ import (
 )
 
 type Deps struct {
-	Logger    *slog.Logger
-	Auth      *auth.Handler
-	Sessions  *scs.SessionManager
-	Users     userGetter
-	Webhook   *webhook.Handler
-	Seasons   seasonFinder
-	Standings standingsQuerier
+	Logger     *slog.Logger
+	Auth       *auth.Handler
+	Sessions   *scs.SessionManager
+	Users      userGetter
+	Webhook    *webhook.Handler
+	Seasons    seasonFinder
+	Standings  standingsQuerier
+	Activities activityLister
 }
 
 // NewRouter builds the http router with all the application routes.
@@ -44,6 +45,9 @@ func NewRouter(deps Deps) http.Handler {
 			r.Get("/me", meHandler(deps.Logger))
 			if deps.Seasons != nil && deps.Standings != nil {
 				r.Get("/leaderboard", leaderboardHandler(deps.Seasons, deps.Standings, time.Now, deps.Logger))
+			}
+			if deps.Activities != nil {
+				r.Get("/me/activities", activitiesHandler(deps.Seasons, deps.Activities, time.Now, deps.Logger))
 			}
 		})
 	}
