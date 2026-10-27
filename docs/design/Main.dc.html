@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Leaderboard · Entrar</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="app" data-theme="{{theme}}">
+<main class="login">
+<div class="login__card">
+<sc-if value="{{error}}" hint-placeholder-val="{{false}}">
+<div class="alert" role="alert">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5v.01"></path></svg>
+<p class="alert__text">No se pudo iniciar sesión o se canceló. Inténtalo de nuevo.</p>
+</div>
+</sc-if>
+<h1 class="login__brand">
+<svg class="icon icon--filled" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="12" width="6" height="9" rx="1.5"></rect><rect x="9" y="4" width="6" height="17" rx="1.5"></rect><rect x="15.5" y="8.5" width="6" height="12.5" rx="1.5"></rect></svg>
+<span>Leaderboard</span>
+</h1>
+<p class="login__pitch">Entrena. Suma puntos. <span class="login__pitch-accent">Sube en la clasificación.</span></p>
+<ul class="login__rules" aria-label="Cómo se puntúa, en resumen">
+<li class="login__rule"><span class="login__rule-value" aria-hidden="true">2</span><span><strong>2 puntos</strong> por carrera, bici o natación de 30 min o más.</span></li>
+<li class="login__rule"><span class="login__rule-value" aria-hidden="true">4</span><span><strong>4 puntos</strong> si es una competición.</span></li>
+<li class="login__rule"><span class="login__rule-value" aria-hidden="true">×2</span><span>Cuentan <strong>hasta 2 actividades al día</strong>, las de más puntos.</span></li>
+</ul>
+<a class="strava-button" href="Leaderboard.dc.html">Conectar con Strava</a>
+<p class="login__hint">Entras o te registras con tu cuenta de Strava. Tus actividades llegan solas.</p>
+</div>
+<footer class="login__footer">Powered by Strava</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"error":{"editor":"boolean","default":false},"theme":{"editor":"enum","options":["auto","light","dark"],"default":"auto"},"$preview":{"width":390,"height":844}}'>
+// <LoginPage error={boolean} />
+// In the SPA the Strava link points to /auth/strava (full page load, not a router link);
+// here it jumps to the Clasificación artboard so the prototype flows.
+// `error` comes from the callback redirect (e.g. /?login=error).
+class Component extends DCLogic {
+renderVals() {
+return {
+error: this.props.error ?? false,
+theme: this.props.theme ?? 'auto',
+};
+}
+}
+</script>
+</body>
+</html>

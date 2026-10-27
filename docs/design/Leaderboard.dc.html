@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Clasificación</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="app" data-theme="{{theme}}">
+<div class="app__shell">
+
+<header class="top-bar">
+<div class="top-bar__inner">
+<a class="top-bar__brand" href="Leaderboard.dc.html">
+<svg class="icon icon--filled" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="12" width="6" height="9" rx="1.5"></rect><rect x="9" y="4" width="6" height="17" rx="1.5"></rect><rect x="15.5" y="8.5" width="6" height="12.5" rx="1.5"></rect></svg>
+<span>Leaderboard</span>
+</a>
+<nav class="top-bar__nav" aria-label="Principal">
+<a class="nav-link" href="Leaderboard.dc.html" aria-current="page">Clasificación</a>
+<a class="nav-link" href="Activities.dc.html">Mis actividades</a>
+<a class="nav-link" href="Rules.dc.html">Cómo se puntúa</a>
+</nav>
+<div class="top-bar__user">
+<span class="top-bar__name">{{me.firstName}}</span>
+<form class="top-bar__logout" method="post" action="/auth/logout" onSubmit="{{preventSubmit}}">
+<button class="button button--ghost button--small" type="submit">
+<svg class="icon icon--small" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"></path></svg>
+<span class="top-bar__logout-label">Cerrar sesión</span>
+</button>
+</form>
+</div>
+</div>
+</header>
+
+<main class="app__main">
+
+<sc-if value="{{isReady}}" hint-placeholder-val="{{true}}">
+<div class="page-header">
+<p class="page-header__eyebrow">{{seasonName}} · {{seasonRange}}</p>
+<h1 class="page-header__title">Clasificación</h1>
+</div>
+<dl class="stat-summary">
+<div class="stat stat--accent">
+<dt class="stat__label">Tu posición</dt>
+<dd class="stat__value">{{myRank}}º</dd>
+</div>
+<div class="stat">
+<dt class="stat__label">Tus puntos</dt>
+<dd class="stat__value">{{myPoints}}<span class="stat__unit">pts</span></dd>
+</div>
+</dl>
+<ol class="standings" aria-label="Clasificación de la temporada">
+<sc-for list="{{rows}}" as="row" hint-placeholder-count="10">
+<li class="{{row.rowClass}}">
+<span class="{{row.rankClass}}"><span class="visually-hidden">Puesto </span>{{row.rank}}</span>
+<span class="avatar" aria-hidden="true">{{row.initials}}</span>
+<span class="standings__member">
+<span class="standings__name">{{row.name}}</span>
+<sc-if value="{{row.isMe}}" hint-placeholder-val="{{false}}"><span class="badge badge--you">Tú</span></sc-if>
+</span>
+<span class="standings__points"><span class="standings__points-value">{{row.points}}</span><abbr class="standings__points-unit" title="puntos">pts</abbr></span>
+</li>
+</sc-for>
+</ol>
+<p class="standings__footer"><a href="Rules.dc.html">¿Cómo se puntúa?</a></p>
+</sc-if>
+
+<sc-if value="{{isLoading}}" hint-placeholder-val="{{false}}">
+<div aria-busy="true">
+<p class="visually-hidden" role="status">Cargando la clasificación…</p>
+<div class="page-header" aria-hidden="true">
+<span class="skeleton skeleton--short"></span>
+<span class="skeleton skeleton--title"></span>
+</div>
+<div class="stat-summary" aria-hidden="true">
+<span class="skeleton skeleton--stat"></span>
+<span class="skeleton skeleton--stat"></span>
+</div>
+<ul class="standings" aria-hidden="true">
+<sc-for list="{{skeletonRows}}" as="s" hint-placeholder-count="6">
+<li class="standings__row">
+<span class="skeleton skeleton--circle"></span>
+<span class="skeleton skeleton--avatar"></span>
+<span class="skeleton skeleton--line"></span>
+<span class="skeleton skeleton--number"></span>
+</li>
+</sc-for>
+</ul>
+</div>
+</sc-if>
+
+<sc-if value="{{isNoSeason}}" hint-placeholder-val="{{false}}">
+<div class="page-header">
+<h1 class="page-header__title">Clasificación</h1>
+</div>
+<div class="empty-state">
+<span class="empty-state__icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3v4M16 3v4"></path></svg></span>
+<p class="empty-state__title">Ahora mismo no hay ninguna temporada en curso.</p>
+<p class="empty-state__text">Cuando empiece la próxima, verás aquí la clasificación.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{isError}}" hint-placeholder-val="{{false}}">
+<div class="page-header">
+<h1 class="page-header__title">Clasificación</h1>
+</div>
+<div class="empty-state empty-state--error" role="alert">
+<span class="empty-state__icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5v.01"></path></svg></span>
+<p class="empty-state__title">Algo ha fallado.</p>
+<p class="empty-state__text">No hemos podido cargar la clasificación.</p>
+<button class="button button--primary" type="button" onClick="{{retry}}">Reintentar</button>
+</div>
+</sc-if>
+
+</main>
+
+<nav class="tab-bar" aria-label="Principal">
+<a class="tab-bar__link" href="Leaderboard.dc.html" aria-current="page">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5h18M4.5 20.5v-7h5v7M9.5 20.5V5h5v15.5M14.5 20.5v-10h5v10"></path></svg>
+<span>Clasificación</span>
+</a>
+<a class="tab-bar__link" href="Activities.dc.html">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"></path></svg>
+<span>Mis actividades</span>
+</a>
+<a class="tab-bar__link" href="Rules.dc.html">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5M12 7.5v.01"></path></svg>
+<span>Reglas</span>
+</a>
+</nav>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"viewState":{"editor":"enum","options":["ready","loading","no-season","error"],"default":"ready"},"theme":{"editor":"enum","options":["auto","light","dark"],"default":"auto"},"$preview":{"width":390,"height":1100}}'>
+// <LeaderboardPage> = <PageHeader> + <StatSummary> + <Standings> (one <StandingsRow> per standing).
+// Data: GET /api/me + GET /api/leaderboard. The API already sorts and ranks (ties share a rank,
+// 0-point members last), so the client only maps rows; it never re-ranks.
+var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+
+// "2026-09-01" -> "1 sept". Parse the parts by hand: new Date("2026-09-01") is UTC midnight
+// and shows the previous day in negative-offset zones.
+function formatShortDate(iso) {
+var parts = iso.split('-');
+return Number(parts[2]) + ' ' + MONTHS[Number(parts[1]) - 1];
+}
+
+function initials(firstName, lastName) {
+return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
+}
+
+var ME = { id: 1, stravaId: 12345678, firstName: 'Ana', lastName: 'García' };
+
+var LEADERBOARD = {
+season: { id: 3, name: 'Otoño 2026', startDate: '2026-09-01', endDate: '2026-12-31' },
+standings: [
+{ rank: 1, userId: 4, firstName: 'Luis', lastName: 'Pérez', points: 46 },
+{ rank: 2, userId: 1, firstName: 'Ana', lastName: 'García', points: 40 },
+{ rank: 2, userId: 7, firstName: 'Marta', lastName: 'Suárez', points: 40 },
+{ rank: 4, userId: 12, firstName: 'María José', lastName: 'Hernández-Villalobos', points: 34 },
+{ rank: 5, userId: 2, firstName: 'Jon', lastName: 'Ibarra', points: 22 },
+{ rank: 6, userId: 5, firstName: 'Iker', lastName: 'Etxeberria', points: 18 },
+{ rank: 7, userId: 8, firstName: 'Lucía', lastName: 'Romero', points: 12 },
+{ rank: 8, userId: 3, firstName: 'Pablo', lastName: 'Domínguez', points: 6 },
+{ rank: 9, userId: 6, firstName: 'Carlos', lastName: 'Navarro', points: 0 },
+{ rank: 9, userId: 9, firstName: 'Sara', lastName: 'Ruiz', points: 0 }
+]
+};
+
+var MEDALS = { 1: 'gold', 2: 'silver', 3: 'bronze' };
+
+class Component extends DCLogic {
+renderVals() {
+var override = this.state && this.state.viewState;
+var viewState = override || this.props.viewState || 'ready';
+var season = LEADERBOARD.season;
+var mine = LEADERBOARD.standings.find(function (s) { return s.userId === ME.id; });
+
+var rows = LEADERBOARD.standings.map(function (s) {
+var isMe = s.userId === ME.id;
+var rowClass = 'standings__row' + (isMe ? ' standings__row--me' : '') + (s.points === 0 ? ' standings__row--zero' : '');
+var rankClass = 'rank' + (MEDALS[s.rank] ? ' rank--' + MEDALS[s.rank] : '');
+return {
+rank: s.rank,
+points: s.points,
+name: s.firstName + ' ' + s.lastName,
+initials: initials(s.firstName, s.lastName),
+isMe: isMe,
+rowClass: rowClass,
+rankClass: rankClass
+};
+});
+
+return {
+theme: this.props.theme || 'auto',
+me: ME,
+seasonName: season.name,
+seasonRange: formatShortDate(season.startDate) + ' – ' + formatShortDate(season.endDate),
+myRank: mine ? mine.rank : '–',
+myPoints: mine ? mine.points : 0,
+rows: rows,
+skeletonRows: [1, 2, 3, 4, 5, 6],
+isReady: viewState === 'ready',
+isLoading: viewState === 'loading',
+isNoSeason: viewState === 'no-season',
+isError: viewState === 'error',
+retry: () => this.setState({ viewState: 'ready' }),
+preventSubmit: function (e) { e.preventDefault(); }
+};
+}
+}
+</script>
+</body>
+</html>

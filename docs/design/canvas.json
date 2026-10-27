@@ -1,0 +1,28 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-27T10:00:00Z" },
+  "title": "Leaderboard mock-up",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "Login", "is_interactive": true },
+    "Leaderboard.dc.html": { "x": 470, "y": 0, "w": 390, "h": 1100, "title": "Clasificación", "is_interactive": true },
+    "Activities.dc.html": { "x": 940, "y": 0, "w": 390, "h": 1500, "title": "Mis actividades", "is_interactive": true },
+    "Rules.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 1500, "title": "Cómo se puntúa", "is_interactive": true },
+    "LeaderboardWide.dc.html": { "x": 0, "y": 1920, "w": 1280, "h": 1000, "title": "Clasificación · escritorio", "is_interactive": true },
+    "States.dc.html": { "x": 1360, "y": 1920, "w": 3050, "h": 900, "title": "Estados: error, carga, vacío" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Leaderboard.dc.html",
+    "Activities.dc.html",
+    "Rules.dc.html",
+    "LeaderboardWide.dc.html",
+    "States.dc.html"
+  ],
+  "notes": {
+    "rowMobile": { "x": 0, "y": -300, "text": "Móvil · 390 px", "kind": "title1", "maxW": 1800 },
+    "rowWide": { "x": 0, "y": 1620, "text": "Escritorio y estados", "kind": "title1", "maxW": 4410 }
+  },
+  "designSystems": []
+}

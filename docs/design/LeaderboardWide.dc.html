@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Clasificación · escritorio</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<dc-import name="Leaderboard" view-state="ready" theme="{{theme}}" hint-size="100%,1000px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["auto","light","dark"],"default":"auto"},"$preview":{"width":1280,"height":1000}}'>
+// Same <LeaderboardPage> at 1280 px: top-bar links replace the tab bar, content capped at 44rem.
+class Component extends DCLogic {
+renderVals() {
+return { theme: this.props.theme || 'auto' };
+}
+}
+</script>
+</body>
+</html>
