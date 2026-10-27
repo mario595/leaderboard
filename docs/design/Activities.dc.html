@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mis actividades</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="app" data-theme="{{theme}}">
+<div class="app__shell">
+
+<header class="top-bar">
+<div class="top-bar__inner">
+<a class="top-bar__brand" href="Leaderboard.dc.html">
+<svg class="icon icon--filled" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="12" width="6" height="9" rx="1.5"></rect><rect x="9" y="4" width="6" height="17" rx="1.5"></rect><rect x="15.5" y="8.5" width="6" height="12.5" rx="1.5"></rect></svg>
+<span>Leaderboard</span>
+</a>
+<nav class="top-bar__nav" aria-label="Principal">
+<a class="nav-link" href="Leaderboard.dc.html">Clasificación</a>
+<a class="nav-link" href="Activities.dc.html" aria-current="page">Mis actividades</a>
+<a class="nav-link" href="Rules.dc.html">Cómo se puntúa</a>
+</nav>
+<div class="top-bar__user">
+<span class="top-bar__name">{{me.firstName}}</span>
+<form class="top-bar__logout" method="post" action="/auth/logout" onSubmit="{{preventSubmit}}">
+<button class="button button--ghost button--small" type="submit">
+<svg class="icon icon--small" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"></path></svg>
+<span class="top-bar__logout-label">Cerrar sesión</span>
+</button>
+</form>
+</div>
+</div>
+</header>
+
+<main class="app__main">
+
+<sc-if value="{{showHeader}}" hint-placeholder-val="{{true}}">
+<div class="page-header">
+<p class="page-header__eyebrow">{{seasonName}} · {{seasonRange}}</p>
+<h1 class="page-header__title">{{fullName}}</h1>
+</div>
+<dl class="stat-summary">
+<div class="stat stat--accent">
+<dt class="stat__label">Tu posición</dt>
+<dd class="stat__value">{{myRank}}º</dd>
+</div>
+<div class="stat">
+<dt class="stat__label">Tus puntos</dt>
+<dd class="stat__value">{{myPoints}}<span class="stat__unit">pts</span></dd>
+</div>
+</dl>
+</sc-if>
+
+<sc-if value="{{isReady}}" hint-placeholder-val="{{true}}">
+<p class="activity-feed__note">Si editas una actividad en Strava, sus puntos pueden tardar hasta un par de horas en actualizarse.</p>
+<sc-for list="{{days}}" as="day" hint-placeholder-count="5">
+<section class="activity-day">
+<h2 class="activity-day__header">
+<span class="activity-day__date"><time datetime="{{day.date}}">{{day.label}}</time></span>
+<span class="activity-day__points">{{day.points}} pts</span>
+</h2>
+<ul class="activity-day__list">
+<sc-for list="{{day.activities}}" as="act" hint-placeholder-count="2">
+<li class="{{act.cardClass}}">
+<span class="activity-card__icon">
+<sc-if value="{{act.isRun}}" hint-placeholder-val="{{true}}"><svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Carrera a pie"><circle cx="14.5" cy="4.5" r="2"></circle><path d="M6 11.5l3.5-3h4.5l2.5 4 3 1M10.5 8.5L9 15l4 2.5V22M9 15l-2.5 6"></path></svg></sc-if>
+<sc-if value="{{act.isRide}}" hint-placeholder-val="{{false}}"><svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Ciclismo"><circle cx="5.5" cy="16.5" r="3.5"></circle><circle cx="18.5" cy="16.5" r="3.5"></circle><path d="M5.5 16.5L9 9h6.5l3 7.5M9 9l3.5 7.5h-7M13.5 5.5h3l-1 3.5"></path></svg></sc-if>
+<sc-if value="{{act.isSwim}}" hint-placeholder-val="{{false}}"><svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Natación"><circle cx="16.5" cy="7.5" r="2"></circle><path d="M4 13l5.5-4 3 3.5M2.5 17.5c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1"></path></svg></sc-if>
+<sc-if value="{{act.isOther}}" hint-placeholder-val="{{false}}"><svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Otro deporte"><path d="M3 12h4l3-7 4 14 3-7h4"></path></svg></sc-if>
+</span>
+<div class="activity-card__body">
+<p class="activity-card__title">
+<span class="activity-card__sport">{{act.sportLabel}}</span>
+<span class="activity-card__time"><time datetime="{{act.startLocal}}">{{act.time}}</time></span>
+<sc-if value="{{act.competition}}" hint-placeholder-val="{{false}}">
+<span class="badge badge--competition"><svg class="icon icon--small" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0V4zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20.5h7M10 17h4v3.5h-4z"></path></svg>Competición</span>
+</sc-if>
+</p>
+<p class="activity-card__meta">
+<span><span class="visually-hidden">Tiempo en movimiento: </span>{{act.duration}}</span>
+<span aria-hidden="true">·</span>
+<span><span class="visually-hidden">Distancia: </span>{{act.distance}}</span>
+</p>
+<sc-if value="{{act.reason}}" hint-placeholder-val="{{false}}">
+<p class="activity-card__reason">{{act.reason}}</p>
+</sc-if>
+</div>
+<p class="activity-card__points"><span class="activity-card__points-value">{{act.points}}</span><abbr class="activity-card__points-unit" title="puntos">pts</abbr></p>
+</li>
+</sc-for>
+</ul>
+</section>
+</sc-for>
+<sc-if value="{{hasMore}}" hint-placeholder-val="{{true}}">
+<div class="load-more">
+<button class="button button--secondary" type="button" onClick="{{loadMore}}">Cargar más</button>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{isLoading}}" hint-placeholder-val="{{false}}">
+<div aria-busy="true">
+<p class="visually-hidden" role="status">Cargando tus actividades…</p>
+<div class="page-header" aria-hidden="true">
+<span class="skeleton skeleton--short"></span>
+<span class="skeleton skeleton--title"></span>
+</div>
+<div class="stat-summary" aria-hidden="true">
+<span class="skeleton skeleton--stat"></span>
+<span class="skeleton skeleton--stat"></span>
+</div>
+<ul class="activity-day__list" aria-hidden="true">
+<sc-for list="{{skeletonRows}}" as="s" hint-placeholder-count="5">
+<li class="skeleton-card">
+<span class="skeleton skeleton--avatar"></span>
+<span class="skeleton-card__lines"><span class="skeleton skeleton--line"></span><span class="skeleton skeleton--short"></span></span>
+<span class="skeleton skeleton--number"></span>
+</li>
+</sc-for>
+</ul>
+</div>
+</sc-if>
+
+<sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+<div class="page-header">
+<p class="page-header__eyebrow">{{seasonName}} · {{seasonRange}}</p>
+<h1 class="page-header__title">{{fullName}}</h1>
+</div>
+<div class="empty-state">
+<span class="empty-state__icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="14.5" cy="4.5" r="2"></circle><path d="M6 11.5l3.5-3h4.5l2.5 4 3 1M10.5 8.5L9 15l4 2.5V22M9 15l-2.5 6"></path></svg></span>
+<p class="empty-state__title">Aún no tienes actividades esta temporada. ¡A entrenar!</p>
+<p class="empty-state__text">Tus actividades de Strava aparecerán aquí poco después de subirlas.</p>
+<a class="button button--secondary" href="Rules.dc.html">Ver cómo se puntúa</a>
+</div>
+</sc-if>
+
+<sc-if value="{{isError}}" hint-placeholder-val="{{false}}">
+<div class="page-header">
+<h1 class="page-header__title">Mis actividades</h1>
+</div>
+<div class="empty-state empty-state--error" role="alert">
+<span class="empty-state__icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5v.01"></path></svg></span>
+<p class="empty-state__title">Algo ha fallado.</p>
+<p class="empty-state__text">No hemos podido cargar tus actividades.</p>
+<button class="button button--primary" type="button" onClick="{{retry}}">Reintentar</button>
+</div>
+</sc-if>
+
+</main>
+
+<nav class="tab-bar" aria-label="Principal">
+<a class="tab-bar__link" href="Leaderboard.dc.html">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5h18M4.5 20.5v-7h5v7M9.5 20.5V5h5v15.5M14.5 20.5v-10h5v10"></path></svg>
+<span>Clasificación</span>
+</a>
+<a class="tab-bar__link" href="Activities.dc.html" aria-current="page">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"></path></svg>
+<span>Mis actividades</span>
+</a>
+<a class="tab-bar__link" href="Rules.dc.html">
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5M12 7.5v.01"></path></svg>
+<span>Reglas</span>
+</a>
+</nav>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"viewState":{"editor":"enum","options":["ready","loading","empty","error"],"default":"ready"},"lastPage":{"editor":"boolean","default":false},"theme":{"editor":"enum","options":["auto","light","dark"],"default":"auto"},"$preview":{"width":390,"height":1500}}'>
+// <ActivitiesPage> = <PageHeader> + <StatSummary> + <ActivityDay> per day (<ActivityCard> per activity) + <LoadMore>.
+// Data: GET /api/me, GET /api/leaderboard (rank, total), GET /api/me/activities (pages appended).
+//
+// Grouped by day: the daily cap (max 2 scoring activities) is per day, so the day header with
+// the day's points explains a 0-point card at a glance ("Límite diario alcanzado"), and on a
+// phone the date moves out of every card, leaving room for the numbers. Grouping is done on the
+// client from `date`; a day split across two pages merges when the next page is appended.
+
+var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+var WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+
+var SPORTS = {
+Run: { label: 'Carrera', kind: 'run', counts: true },
+TrailRun: { label: 'Trail', kind: 'run', counts: true },
+VirtualRun: { label: 'Carrera virtual', kind: 'run', counts: true },
+Ride: { label: 'Ciclismo', kind: 'ride', counts: true },
+MountainBikeRide: { label: 'BTT', kind: 'ride', counts: true },
+GravelRide: { label: 'Gravel', kind: 'ride', counts: true },
+VirtualRide: { label: 'Ciclismo virtual', kind: 'ride', counts: true },
+Swim: { label: 'Natación', kind: 'swim', counts: true },
+EBikeRide: { label: 'Bici eléctrica', kind: 'ride', counts: false },
+EMountainBikeRide: { label: 'BTT eléctrica', kind: 'ride', counts: false },
+Walk: { label: 'Caminata', kind: 'other', counts: false }
+};
+
+function sportOf(code) {
+return SPORTS[code] || { label: code, kind: 'other', counts: false };
+}
+
+// "2026-10-26" -> "lun 26 oct". new Date(y, m, d) is local midnight, so getDay() is correct.
+function formatDay(iso) {
+var p = iso.split('-').map(Number);
+var d = new Date(p[0], p[1] - 1, p[2]);
+return WEEKDAYS[d.getDay()] + ' ' + p[2] + ' ' + MONTHS[p[1] - 1];
+}
+
+function formatShortDate(iso) {
+var p = iso.split('-').map(Number);
+return p[2] + ' ' + MONTHS[p[1] - 1];
+}
+
+// "2026-10-26T08:05:00" -> "08:05". Wall clock: slice the string, never go through Date.
+function formatTime(startLocal) {
+return startLocal.slice(11, 16);
+}
+
+// 3725 -> "1:02:05", 2700 -> "45:00".
+function formatDuration(seconds) {
+var h = Math.floor(seconds / 3600);
+var m = Math.floor((seconds % 3600) / 60);
+var s = seconds % 60;
+var mm = String(m).padStart(2, '0');
+var ss = String(s).padStart(2, '0');
+return h > 0 ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+}
+
+// Thousands with a dot by hand: Intl es-ES does not group 4-digit numbers ("2500", not "2.500").
+function groupThousands(n) {
+return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+// Swims in metres (2.500 m), everything else in km with one decimal (12,0 km).
+function formatDistance(metres, kind) {
+if (kind === 'swim') return groupThousands(Math.round(metres)) + ' m';
+var km = (metres / 1000).toFixed(1).split('.');
+return groupThousands(Number(km[0])) + ',' + km[1] + ' km';
+}
+
+// The API does not send a reason yet. Two of the three are derivable from the activity alone;
+// anything else with 0 points inside the season is the daily cap.
+function zeroReason(a, sport) {
+if (a.points > 0) return '';
+if (!sport.counts) return 'Deporte no puntuable';
+if (a.movingTime < 1800) return 'Menos de 30 min';
+return 'Límite diario alcanzado';
+}
+
+var ME = { id: 1, stravaId: 12345678, firstName: 'Ana', lastName: 'García' };
+var MY_STANDING = { rank: 2, points: 40 };
+var SEASON = { id: 3, name: 'Otoño 2026', startDate: '2026-09-01', endDate: '2026-12-31' };
+
+var ACTIVITIES = [
+{ id: 1611, date: '2026-10-26', startLocal: '2026-10-26T08:05:00', sportType: 'Run', movingTime: 3725, distance: 12034.5, competition: true, points: 4 },
+{ id: 1602, date: '2026-10-25', startLocal: '2026-10-25T18:30:00', sportType: 'Swim', movingTime: 2700, distance: 2500, competition: false, points: 2 },
+{ id: 1598, date: '2026-10-25', startLocal: '2026-10-25T07:00:00', sportType: 'GravelRide', movingTime: 7380, distance: 54210.3, competition: false, points: 2 },
+{ id: 1590, date: '2026-10-25', startLocal: '2026-10-25T06:10:00', sportType: 'Run', movingTime: 1980, distance: 5520, competition: false, points: 0 },
+{ id: 1585, date: '2026-10-23', startLocal: '2026-10-23T19:00:00', sportType: 'Ride', movingTime: 5412, distance: 41820, competition: false, points: 2 },
+{ id: 1581, date: '2026-10-23', startLocal: '2026-10-23T13:15:00', sportType: 'Walk', movingTime: 3130, distance: 4120, competition: false, points: 0 },
+{ id: 1577, date: '2026-10-22', startLocal: '2026-10-22T20:00:00', sportType: 'Swim', movingTime: 2410, distance: 2100, competition: true, points: 4 },
+{ id: 1573, date: '2026-10-22', startLocal: '2026-10-22T07:30:00', sportType: 'TrailRun', movingTime: 1470, distance: 4230, competition: false, points: 0 },
+{ id: 1566, date: '2026-10-18', startLocal: '2026-10-18T16:20:00', sportType: 'EBikeRide', movingTime: 4500, distance: 28310, competition: false, points: 0 },
+{ id: 1562, date: '2026-10-18', startLocal: '2026-10-18T10:00:00', sportType: 'VirtualRide', movingTime: 3600, distance: 30010, competition: false, points: 2 }
+];
+
+function toCard(a) {
+var sport = sportOf(a.sportType);
+return {
+id: a.id,
+startLocal: a.startLocal,
+sportLabel: sport.label,
+time: formatTime(a.startLocal),
+duration: formatDuration(a.movingTime),
+distance: formatDistance(a.distance, sport.kind),
+competition: a.competition,
+points: a.points,
+reason: zeroReason(a, sport),
+cardClass: 'activity-card' + (a.points === 0 ? ' activity-card--zero' : ''),
+isRun: sport.kind === 'run',
+isRide: sport.kind === 'ride',
+isSwim: sport.kind === 'swim',
+isOther: sport.kind === 'other'
+};
+}
+
+// Input is newest first, so consecutive items with the same date form one group.
+function groupByDay(activities) {
+var days = [];
+activities.forEach(function (a) {
+var last = days[days.length - 1];
+if (!last || last.date !== a.date) {
+last = { date: a.date, label: formatDay(a.date), points: 0, activities: [] };
+days.push(last);
+}
+last.points += a.points;
+last.activities.push(toCard(a));
+});
+return days;
+}
+
+class Component extends DCLogic {
+renderVals() {
+var st = this.state || {};
+var viewState = st.viewState || this.props.viewState || 'ready';
+var lastPage = st.lastPage || this.props.lastPage || false;
+return {
+theme: this.props.theme || 'auto',
+me: ME,
+fullName: ME.firstName + ' ' + ME.lastName,
+seasonName: SEASON.name,
+seasonRange: formatShortDate(SEASON.startDate) + ' – ' + formatShortDate(SEASON.endDate),
+myRank: MY_STANDING.rank,
+myPoints: MY_STANDING.points,
+days: groupByDay(ACTIVITIES),
+hasMore: !lastPage,
+skeletonRows: [1, 2, 3, 4, 5],
+showHeader: viewState === 'ready',
+isReady: viewState === 'ready',
+isLoading: viewState === 'loading',
+isEmpty: viewState === 'empty',
+isError: viewState === 'error',
+loadMore: () => this.setState({ lastPage: true }),
+retry: () => this.setState({ viewState: 'ready' }),
+preventSubmit: function (e) { e.preventDefault(); }
+};
+}
+}
+</script>
+</body>
+</html>

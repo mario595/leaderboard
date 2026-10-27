@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Estados de carga, vacío y error</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="review-board" data-theme="{{theme}}">
+<section class="review-board__item">
+<h2 class="review-board__label">Login · error de OAuth</h2>
+<div class="review-board__frame"><dc-import name="Main" error="{{yes}}" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+<section class="review-board__item">
+<h2 class="review-board__label">Clasificación · cargando</h2>
+<div class="review-board__frame"><dc-import name="Leaderboard" view-state="loading" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+<section class="review-board__item">
+<h2 class="review-board__label">Clasificación · sin temporada</h2>
+<div class="review-board__frame"><dc-import name="Leaderboard" view-state="no-season" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+<section class="review-board__item">
+<h2 class="review-board__label">Clasificación · error</h2>
+<div class="review-board__frame"><dc-import name="Leaderboard" view-state="error" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+<section class="review-board__item">
+<h2 class="review-board__label">Mis actividades · cargando</h2>
+<div class="review-board__frame"><dc-import name="Activities" view-state="loading" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+<section class="review-board__item">
+<h2 class="review-board__label">Mis actividades · vacío</h2>
+<div class="review-board__frame"><dc-import name="Activities" view-state="empty" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+<section class="review-board__item">
+<h2 class="review-board__label">Mis actividades · error</h2>
+<div class="review-board__frame"><dc-import name="Activities" view-state="error" theme="{{theme}}" hint-size="390px,760px"></dc-import></div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["auto","light","dark"],"default":"auto"},"$preview":{"width":3050,"height":900}}'>
+// Review board only: the same page components with a forced state, side by side.
+// Each frame is 390 px; the layout reacts to its container (container queries), not the window.
+class Component extends DCLogic {
+renderVals() {
+return { yes: true, theme: this.props.theme || 'auto' };
+}
+}
+</script>
+</body>
+</html>
