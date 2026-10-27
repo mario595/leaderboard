@@ -1,0 +1,591 @@
+/* ==========================================================================
+   Leaderboard: app styles
+   Copied from docs/design/styles.css, one section per component. Sections are
+   added as pages are built (#18 login and shell; #19 leaderboard; #20
+   activities and rules). Breakpoints are container queries on .app, which
+   fills the window here.
+   ========================================================================== */
+
+/* Barlow, self-hosted (bundled from npm): Google Fonts would send every
+   visitor's IP address to Google. Only the Latin subset (enough for
+   Spanish) and the weights the styles use. */
+@import '@fontsource/barlow/latin-400.css';
+@import '@fontsource/barlow/latin-600.css';
+@import '@fontsource/barlow/latin-700.css';
+@import '@fontsource/barlow/latin-800.css';
+
+/* --------------------------------------------------------------------------
+   Tokens
+   -------------------------------------------------------------------------- */
+:root {
+  --color-bg: #f3f4f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #eceef3;
+  --color-border: #dadee7;
+  --color-text: #12151c;
+  --color-text-muted: #4f5666;
+  --color-text-subtle: #626979;
+
+  --color-accent: #2440d0;
+  --color-accent-hover: #1a32ad;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: #e6eaff;
+
+  --color-gold: #f2c230;
+  --color-gold-ink: #3d2e00;
+  --color-silver: #c9ced8;
+  --color-silver-ink: #252a33;
+  --color-bronze: #dc9a6a;
+  --color-bronze-ink: #3a1e08;
+
+  --color-competition-soft: #fff0c2;
+  --color-competition-ink: #634500;
+
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+
+  --shadow-1: 0 1px 2px rgb(18 21 28 / 0.06), 0 1px 1px rgb(18 21 28 / 0.04);
+  --shadow-2: 0 6px 24px rgb(18 21 28 / 0.08);
+  --skeleton-shine: rgb(255 255 255 / 0.6);
+
+  --font-sans:
+    'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --font-size-xs: 0.8125rem;
+  --font-size-s: 0.9375rem;
+  --font-size-m: 1.0625rem;
+  --font-size-l: 1.3125rem;
+  --font-size-xl: 1.75rem;
+  --font-size-xxl: clamp(2.25rem, 1.8rem + 2vw, 3rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-s: 0.5rem;
+  --radius-m: 0.875rem;
+  --radius-l: 1.25rem;
+  --radius-pill: 999px;
+
+  --tap-min: 2.75rem;
+  /* dvh: the visible height on phones, without the browser bars. */
+  --app-min-height: 100dvh;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0d1016;
+    --color-surface: #161a22;
+    --color-surface-2: #212633;
+    --color-border: #2a303d;
+    --color-text: #eef1f6;
+    --color-text-muted: #b0b7c5;
+    --color-text-subtle: #959eaf;
+
+    --color-accent: #8ea3ff;
+    --color-accent-hover: #adbbff;
+    --color-on-accent: #0d1016;
+    --color-accent-soft: #1d2552;
+
+    --color-competition-soft: #3b2e07;
+    --color-competition-ink: #ffd66b;
+
+    --color-danger: #ff8a80;
+    --color-danger-soft: #3a1714;
+
+    --shadow-1: none;
+    --shadow-2: none;
+    --skeleton-shine: rgb(255 255 255 / 0.06);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon--filled {
+  fill: currentColor;
+  stroke: none;
+}
+
+.icon--small {
+  width: 1rem;
+  height: 1rem;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.05em 0.35em;
+  border-radius: 0.3em;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+/* --------------------------------------------------------------------------
+   App shell  ->  <AppShell>
+   -------------------------------------------------------------------------- */
+.app {
+  container-type: inline-size;
+  container-name: app;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-m);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app__shell {
+  min-height: var(--app-min-height);
+  display: flex;
+  flex-direction: column;
+}
+
+.app__main {
+  flex: 1;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+}
+
+@container app (min-width: 640px) {
+  .app__main {
+    padding: var(--space-6) var(--space-5) var(--space-7);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Top bar  ->  <TopBar>
+   -------------------------------------------------------------------------- */
+.top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.top-bar__inner {
+  max-width: 68rem;
+  margin: 0 auto;
+  min-height: 3.5rem;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.top-bar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  color: var(--color-text);
+  font-size: var(--font-size-l);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.top-bar__brand .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--color-accent);
+}
+
+.top-bar__nav {
+  display: none;
+}
+
+.top-bar__user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.top-bar__name {
+  font-weight: 600;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-bar__logout {
+  margin: 0;
+}
+
+/* Below 400 px the logout label is hidden visually (stays in the a11y name). */
+@container app (max-width: 399px) {
+  .top-bar__logout-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+@container app (min-width: 640px) {
+  .top-bar__inner {
+    padding: 0 var(--space-5);
+    gap: var(--space-5);
+  }
+
+  .top-bar__nav {
+    display: flex;
+    gap: var(--space-1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Nav link (top bar, wide screens)  ->  <NavLink>
+   -------------------------------------------------------------------------- */
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-s);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+
+.nav-link[aria-current='page'] {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Tab bar (mobile)  ->  <TabBar>
+   -------------------------------------------------------------------------- */
+.tab-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab-bar__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  min-height: 3.75rem;
+  padding: var(--space-1);
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.tab-bar__link[aria-current='page'] {
+  color: var(--color-accent);
+}
+
+.tab-bar__link[aria-current='page'] .icon {
+  stroke-width: 2.5;
+}
+
+@container app (min-width: 640px) {
+  .tab-bar {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Button  ->  <Button>
+   -------------------------------------------------------------------------- */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.button--primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.button--secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.button--secondary:hover {
+  border-color: var(--color-text-subtle);
+}
+
+.button--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 0 var(--space-3);
+}
+
+.button--ghost:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.button--small {
+  font-size: var(--font-size-s);
+}
+
+.button--block {
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Strava button (official "Connect with Strava" image)  ->  <LoginPage>
+   Strava's guidelines: use their button unmodified. The link only wraps it.
+   -------------------------------------------------------------------------- */
+.strava-button {
+  display: flex;
+  justify-content: center;
+  border-radius: 0.375rem;
+}
+
+.strava-button img {
+  display: block;
+  width: 237px;
+  max-width: 100%;
+  height: auto;
+}
+
+.strava-button:focus-visible {
+  outline-color: var(--color-text);
+}
+
+/* --------------------------------------------------------------------------
+   Login page  ->  <LoginPage>
+   -------------------------------------------------------------------------- */
+.login {
+  min-height: var(--app-min-height);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-4);
+}
+
+.login__card {
+  width: 100%;
+  max-width: 26rem;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.login__brand .icon {
+  width: 2rem;
+  height: 2rem;
+  color: var(--color-accent);
+}
+
+.login__pitch {
+  margin: 0;
+  font-size: var(--font-size-xxl);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+
+.login__pitch-accent {
+  color: var(--color-accent);
+}
+
+.login__rules {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-1);
+}
+
+.login__rule {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-s);
+  color: var(--color-text-muted);
+}
+
+.login__rule strong {
+  color: var(--color-text);
+}
+
+.login__rule-value {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-m);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--font-size-l);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.login__hint {
+  margin: calc(var(--space-2) * -1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+
+.login__footer {
+  padding-top: var(--space-5);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+
+/* Official "Powered by Strava" logo, black or white with the theme
+   (<picture> picks the file). Never larger than the app's own name. */
+.login__footer img {
+  display: block;
+  height: 0.875rem;
+  width: auto;
+  margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Alert (error banner)  ->  <Alert>
+   -------------------------------------------------------------------------- */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-m);
+  background: var(--color-danger-soft);
+  color: var(--color-text);
+  font-size: var(--font-size-s);
+}
+
+.alert .icon {
+  color: var(--color-danger);
+}
+
+.alert__text {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Page header  ->  <PageHeader>
+   -------------------------------------------------------------------------- */
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+
+.page-header__eyebrow {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.page-header__title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
