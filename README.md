@@ -18,12 +18,13 @@ Work in progress. What exists today:
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
 - A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
+- A web frontend (React, TypeScript, Vite) with the Strava login page and the app frame (`web/`)
 - A personal activity list: each of the member's activities in a season, newest first, with points and the competition flag, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: the web pages (a React frontend) and personal pages (a React frontend). The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: the leaderboard and activities pages, and serving the frontend from the Go binary. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -39,6 +40,7 @@ The rules, implemented in `internal/scoring`:
 
 - [Go](https://go.dev/dl/) (the version in `go.mod`)
 - [golangci-lint](https://golangci-lint.run/welcome/install/) v2, only for `make lint`
+- [Node.js](https://nodejs.org/) (the major version in `web/.nvmrc`), only for the frontend
 - A Strava account and a Strava API application (see below)
 
 No C compiler is needed: the SQLite driver is pure Go. (`go test -race` does need one.)
@@ -85,11 +87,22 @@ All settings are environment variables:
 make run
 ```
 
-Then open <http://localhost:8080/auth/strava> and sign in with Strava. You are redirected to `/api/me`, which shows your profile as JSON (there is no frontend yet). Check the server with:
+Check the server with:
 
 ```
 curl localhost:8080/healthz
 ```
+
+### 4. Run the frontend
+
+The frontend lives in `web/`. In development the Vite dev server serves it on port 5173 and forwards `/api` and `/auth` to the Go server, so the browser only talks to one origin (no CORS) and the session cookie just works.
+
+1. Set `BASE_URL=http://localhost:5173` in `.env`, so Strava sends you back through the dev server after logging in. (`.env` wins over a value given on the command line.)
+2. Install the dependencies once: `make web-install`.
+3. Run the Go server (`make run`) and, in a second terminal, `make web-dev`.
+4. Open <http://localhost:5173> and sign in with Strava.
+
+Until the frontend is served by the Go binary (#21), <http://localhost:8080> has no pages, only the API.
 
 ### HTTP endpoints
 
@@ -151,8 +164,13 @@ Create the subscription:
 | `make test` | Run all tests |
 | `make vet` | Run `go vet` |
 | `make lint` | Run golangci-lint |
+| `make web-install` | Install the frontend dependencies (`npm ci`) |
+| `make web-dev` | Start the Vite dev server on port 5173 |
+| `make web-test` | Run the frontend tests (Vitest) |
+| `make web-check` | Everything CI checks on the frontend: lint, type-check, format, tests, build |
+| `make web-build` | Build the frontend into `web/dist/` |
 
-CI runs the format check, `go vet`, the tests and the linter on every pull request. Work happens on one branch per ticket (`feature/<number>-<name>`) and lands through a pull request that closes its issue.
+CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s frontend checks on every pull request. Work happens on one branch per ticket (`feature/<number>-<name>`) and lands through a pull request that closes its issue.
 
 ### Project layout
 
