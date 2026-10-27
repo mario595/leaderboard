@@ -1,4 +1,4 @@
-.PHONY: run build test vet lint strava-subscription strava-subscribe strava-unsubscribe
+.PHONY: run build test vet lint web-install web-dev web-test web-check web-build strava-subscription strava-subscribe strava-unsubscribe
 
 # Exports the variables from .env (if present) into the recipe's shell.
 # Make runs each recipe line in its own shell, so use it on the same line.
@@ -20,6 +20,28 @@ vet:
 
 lint:
 	golangci-lint run
+
+# Frontend (web/). Node version: web/.nvmrc.
+
+# Install exactly what package-lock.json lists.
+web-install:
+	cd web && npm ci
+
+# Vite dev server on :5173, proxying /api and /auth to the Go server on :8080.
+# Run the server with BASE_URL=http://localhost:5173 so the Strava login
+# returns through the proxy.
+web-dev:
+	cd web && npm run dev
+
+web-test:
+	cd web && npm test
+
+# Everything CI checks on the frontend.
+web-check:
+	cd web && npm run lint && npm run typecheck && npm run format:check && npm test && npm run build
+
+web-build:
+	cd web && npm run build
 
 # Strava webhook subscription (one per Strava application). Recipes start
 # with @ so make does not echo commands that reference the client secret.
