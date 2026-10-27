@@ -16,13 +16,13 @@ func TestCallbackValidations(t *testing.T) {
 		name              string
 		cookie            string
 		urlValues         url.Values
-		expectedStatus    int
+		wantLocation      string // every outcome is a 303 back to the app
 		wantCookieCleared bool
 	}{
 		{
-			name:           "user_declined",
-			urlValues:      url.Values{"error": {"access_denied"}},
-			expectedStatus: http.StatusForbidden,
+			name:         "user_declined",
+			urlValues:    url.Values{"error": {"access_denied"}},
+			wantLocation: "/login?error=cancelled",
 		},
 		{
 			name: "no_cookie",
@@ -31,7 +31,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"activity:read,activity:read_all"},
 			},
-			expectedStatus: http.StatusBadRequest,
+			wantLocation: "/login?error=failed",
 		},
 		{
 			name:   "cookie_differs",
@@ -41,7 +41,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"activity:read,activity:read_all"},
 			},
-			expectedStatus:    http.StatusBadRequest,
+			wantLocation:      "/login?error=failed",
 			wantCookieCleared: true,
 		},
 		{
@@ -51,7 +51,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"activity:read,activity:read_all"},
 			},
-			expectedStatus:    http.StatusBadRequest,
+			wantLocation:      "/login?error=failed",
 			wantCookieCleared: true,
 		},
 		{
@@ -61,7 +61,7 @@ func TestCallbackValidations(t *testing.T) {
 				"state": {"abc"},
 				"scope": {"activity:read,activity:read_all"},
 			},
-			expectedStatus:    http.StatusBadRequest,
+			wantLocation:      "/login?error=failed",
 			wantCookieCleared: true,
 		},
 		{
@@ -72,7 +72,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read"},
 			},
-			expectedStatus:    http.StatusForbidden,
+			wantLocation:      "/login?error=scope",
 			wantCookieCleared: true,
 		},
 		{
@@ -83,7 +83,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read,activity:read"},
 			},
-			expectedStatus:    http.StatusSeeOther,
+			wantLocation:      "/",
 			wantCookieCleared: true,
 		},
 		{
@@ -94,7 +94,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read activity:read"},
 			},
-			expectedStatus:    http.StatusSeeOther,
+			wantLocation:      "/",
 			wantCookieCleared: true,
 		},
 		{
@@ -105,7 +105,7 @@ func TestCallbackValidations(t *testing.T) {
 				"code":  {"x"},
 				"scope": {"read,activity:read_all"},
 			},
-			expectedStatus:    http.StatusSeeOther,
+			wantLocation:      "/",
 			wantCookieCleared: true,
 		},
 	}
@@ -124,12 +124,13 @@ func TestCallbackValidations(t *testing.T) {
 
 			serveCallback(h, rec, req)
 
-			if rec.Code != tc.expectedStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tc.expectedStatus)
-			}
+			// Never an error page: the user always lands back in the app,
+			// on the leaderboard or on the login page with a reason.
+			testutil.AssertEqual(t, "status", http.StatusSeeOther, rec.Code)
+			testutil.AssertEqual(t, "Location", tc.wantLocation, rec.Result().Header.Get("Location"))
 
 			// Only an accepted login creates a session.
-			if c := sessionCookieOf(rec); c != nil && tc.expectedStatus != http.StatusSeeOther {
+			if c := sessionCookieOf(rec); c != nil && tc.wantLocation != "/" {
 				t.Errorf("rejected login sets a session cookie %q, want none", c.Name)
 			}
 
@@ -176,8 +177,8 @@ func TestCallbackHappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
 
-	if loc := rec.Result().Header.Get("Location"); loc != redirectTo {
-		t.Errorf("Location: got %s, want %s", loc, redirectTo)
+	if loc := rec.Result().Header.Get("Location"); loc != "/" {
+		t.Errorf("Location: got %s, want / (the app)", loc)
 	}
 
 	var cookie *http.Cookie

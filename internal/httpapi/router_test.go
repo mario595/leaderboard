@@ -227,11 +227,12 @@ func TestRouter_authRoutes(t *testing.T) {
 			wantLocation: "www.strava.com",
 		},
 		{
-			name:       "callback is registered and rejects a request without state",
+			// Rejected, but as a redirect back to the login page (#18).
+			name:       "callback is registered and sends a request without state back to the app",
 			handler:    authHandler,
 			method:     http.MethodGet,
 			path:       "/auth/strava/callback",
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusSeeOther,
 		},
 		{
 			name:       "login only accepts GET",
