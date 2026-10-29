@@ -407,3 +407,69 @@ func TestRouter(t *testing.T) {
 	}
 
 }
+
+// TestRouter_spa checks that every path the server does not handle itself
+// reaches the frontend, and that the frontend never shadows the API, the
+// webhook or the health check.
+func TestRouter_spa(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	sessions := scs.New()
+	spa := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("spa"))
+	})
+	router := NewRouter(Deps{
+		Logger:   logger,
+		Sessions: sessions,
+		Users:    &fakeUserStore{user: store.User{ID: 42, FirstName: "Ada"}},
+		Webhook:  webhook.New(&fakeEventInserter{}, "verify-me", 120475, nil, logger),
+		SPA:      spa,
+	})
+	outer := http.NewServeMux()
+	outer.Handle("GET /test-login", sessions.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessions.Put(r.Context(), auth.SessionUserIDKey, int64(42))
+	})))
+	outer.Handle("/", router)
+	app := &authApp{handler: outer}
+	_, _, _, set := app.do(t, "/test-login")
+	cookie := sessionCookie(t, set)
+
+	testCases := []struct {
+		name       string
+		method     string
+		path       string
+		loggedIn   bool
+		wantStatus int
+		wantSPA    bool
+	}{
+		{name: "root", path: "/", wantStatus: http.StatusOK, wantSPA: true},
+		{name: "client route", path: "/activities", wantStatus: http.StatusOK, wantSPA: true},
+		{name: "nested client route", path: "/a/b/c", wantStatus: http.StatusOK, wantSPA: true},
+		// The recorder keeps the body even for HEAD (a real server drops it).
+		{name: "HEAD", method: http.MethodHead, path: "/rules", wantStatus: http.StatusOK, wantSPA: true},
+		{name: "not for POST", method: http.MethodPost, path: "/activities", wantStatus: http.StatusMethodNotAllowed},
+		{name: "health", path: "/healthz", wantStatus: http.StatusOK},
+		{name: "unknown API path, anonymous", path: "/api/nothing-here", wantStatus: http.StatusUnauthorized},
+		{name: "unknown API path, logged in", path: "/api/nothing-here", loggedIn: true, wantStatus: http.StatusNotFound},
+		{name: "API still works", path: "/api/me", loggedIn: true, wantStatus: http.StatusOK},
+		{name: "unknown webhook path", path: "/webhook/nothing-here", wantStatus: http.StatusNotFound},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			method := tc.method
+			if method == "" {
+				method = http.MethodGet
+			}
+			req := httptest.NewRequestWithContext(t.Context(), method, tc.path, nil)
+			if tc.loggedIn {
+				req.AddCookie(cookie)
+			}
+			rec := httptest.NewRecorder()
+
+			app.handler.ServeHTTP(rec, req)
+
+			testutil.AssertEqual(t, "status", tc.wantStatus, rec.Code)
+			testutil.AssertEqual(t, "served by the SPA", tc.wantSPA, rec.Body.String() == "spa")
+		})
+	}
+}

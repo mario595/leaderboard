@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import { ActivitiesPage } from './pages/ActivitiesPage'
 import { AppShell } from './components/AppShell'
 import { LeaderboardPage } from './pages/LeaderboardPage'
@@ -19,6 +19,7 @@ export function AppRoutes() {
           <Route path="activities" element={<ActivitiesPage />} />
           <Route path="rules" element={<RulesPage />} />
         </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   )
