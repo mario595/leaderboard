@@ -36,3 +36,23 @@ export type Me = {
   firstName: string
   lastName: string
 }
+
+export type Season = {
+  id: number
+  name: string
+  startDate: string
+  endDate: string
+}
+
+export type Standing = {
+  rank: number
+  userId: number
+  firstName: string
+  lastName: string
+  points: number
+}
+
+export type Leaderboard = {
+  season: Season
+  standings: Standing[]
+}
