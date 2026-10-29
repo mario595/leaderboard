@@ -56,3 +56,21 @@ export type Leaderboard = {
   season: Season
   standings: Standing[]
 }
+
+export type Activity = {
+  id: number
+  date: string
+  startLocal: string
+  sportType: string
+  movingTime: number
+  distance: number
+  competition: boolean
+  points: number
+  zeroReason: string
+}
+
+export type ActivitiesPage = {
+  season: Season
+  activities: Activity[]
+  nextCursor: string | null
+}
