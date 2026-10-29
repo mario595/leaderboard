@@ -30,7 +30,7 @@ export function formatSeasonRange(from: string, to: string): string {
 // initials returns the upper-cased first letters of the first and last name
 // ("AG" for Ana García), or fewer when a name is empty.
 export function initials(first: string, last: string): string {
-  const firstInitial = first.at(0)
-  const lastInitial = last.at(0)
+  const firstInitial = first.charAt(0)
+  const lastInitial = last.charAt(0)
   return `${firstInitial ? firstInitial.toUpperCase() : ''}${lastInitial ? lastInitial.toUpperCase() : ''}`
 }
