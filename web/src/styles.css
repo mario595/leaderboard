@@ -409,6 +409,13 @@ body {
   width: 100%;
 }
 
+/* A button waiting for its request ("Cargando…"): no hover, no pointer. */
+.button:disabled {
+  cursor: default;
+  color: var(--color-text-subtle);
+  border-color: var(--color-border);
+}
+
 /* --------------------------------------------------------------------------
    Strava button (official "Connect with Strava" image)  ->  <LoginPage>
    Strava's guidelines: use their button unmodified. The link only wraps it.
@@ -825,6 +832,172 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   Activity day (group header + list)  ->  <ActivityDay>
+   -------------------------------------------------------------------------- */
+.activity-feed__note {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.activity-day + .activity-day {
+  margin-top: var(--space-5);
+}
+
+.activity-day__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-s);
+  font-weight: 700;
+}
+
+.activity-day__date {
+  color: var(--color-text-muted);
+}
+
+.activity-day__points {
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-day__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* --------------------------------------------------------------------------
+   Activity card  ->  <ActivityCard>
+   -------------------------------------------------------------------------- */
+.activity-card {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-1);
+}
+
+.activity-card__icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.activity-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.activity-card__title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+}
+
+.activity-card__sport {
+  font-weight: 700;
+}
+
+.activity-card__time {
+  font-size: var(--font-size-s);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-card__meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+  font-size: var(--font-size-s);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-card__reason {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-subtle);
+}
+
+.activity-card__points {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-card__points-value {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.activity-card__points-unit {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* Zero points: de-emphasised with muted colours, not opacity (keeps AA). */
+.activity-card--zero {
+  background: transparent;
+  box-shadow: none;
+  border-style: dashed;
+}
+
+.activity-card--zero .activity-card__icon {
+  background: var(--color-surface-2);
+  color: var(--color-text-subtle);
+}
+
+.activity-card--zero .activity-card__sport,
+.activity-card--zero .activity-card__points-value {
+  color: var(--color-text-subtle);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Load more  ->  <LoadMore>
+   -------------------------------------------------------------------------- */
+.load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+/* Shown above the button when a page failed; the list stays as it was. */
+.load-more__error {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+/* --------------------------------------------------------------------------
    Skeleton (loading)  ->  <Skeleton>
    -------------------------------------------------------------------------- */
 .skeleton {
@@ -958,4 +1131,109 @@ body {
   max-width: 22rem;
   color: var(--color-text-muted);
   font-size: var(--font-size-s);
+}
+
+/* --------------------------------------------------------------------------
+   Rules page  ->  <RulesPage> + <RuleCard>
+   -------------------------------------------------------------------------- */
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rule-card {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-1);
+}
+
+.rule-card__icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-m);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--font-size-l);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rule-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rule-card__title {
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.rule-card__text {
+  margin: 0;
+  font-size: var(--font-size-s);
+  color: var(--color-text-muted);
+}
+
+.rule-card__text strong {
+  color: var(--color-text);
+}
+
+.chip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.chip {
+  padding: 0.125rem 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.points-pair {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.points-pair__item {
+  flex: 1;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-m);
+  background: var(--color-surface-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.points-pair__value {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.points-pair__label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
