@@ -18,13 +18,13 @@ Work in progress. What exists today:
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
 - A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
-- A web frontend (React, TypeScript, Vite) with the Strava login page and the app frame (`web/`)
+- A web frontend (React, TypeScript, Vite) with the Strava login page, the app frame and the leaderboard page (`web/`)
 - A personal activity list: each of the member's activities in a season, newest first, with points and the competition flag, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: the leaderboard and activities pages, and serving the frontend from the Go binary. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: the activities and rules pages, and serving the frontend from the Go binary. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 

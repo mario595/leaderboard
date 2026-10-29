@@ -28,6 +28,19 @@ describe('getJSON', () => {
     expect((err as ApiError).status).toBe(401)
   })
 
+  it('passes an abort signal on to fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await getJSON('/api/me', { signal: controller.signal })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/me',
+      expect.objectContaining({ signal: controller.signal }),
+    )
+  })
+
   it('lets a network failure through', async () => {
     vi.stubGlobal(
       'fetch',

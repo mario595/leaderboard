@@ -1,19 +1,20 @@
 import { Route, Routes } from 'react-router'
-import { AppShell } from './AppShell'
-import { LoginPage } from './LoginPage'
-import { PageHeader } from './PageHeader'
-import { RequireAuth } from './RequireAuth'
+import { AppShell } from './components/AppShell'
+import { LeaderboardPage } from './pages/LeaderboardPage'
+import { LoginPage } from './pages/LoginPage'
+import { PageHeader } from './components/PageHeader'
+import { RequireAuth } from './auth/RequireAuth'
 
 // AppRoutes is the route table. /login is public; every other page sits
 // behind RequireAuth (logged-in users only) inside AppShell (top bar and tab
-// bar). The pages are placeholders until #19 and #20.
+// bar). The activities and rules pages are placeholders until #20.
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
-          <Route index element={<PageHeader title="Clasificación" />} />
+          <Route index element={<LeaderboardPage />} />
           <Route
             path="activities"
             element={<PageHeader title="Mis actividades" />}

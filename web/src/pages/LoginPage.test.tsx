@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppRoutes } from './App'
-import { AuthProvider } from './auth'
+import { AppRoutes } from '../App'
+import { AuthProvider } from '../auth/auth'
 
 beforeEach(() => {
   // Nobody is logged in: /api/me answers 401.

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import { type Me } from './api'
+import { type Me } from '../api/api'
 
 export type AuthState =
   | { status: 'loading' }

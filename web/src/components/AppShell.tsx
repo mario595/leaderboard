@@ -6,7 +6,7 @@ import {
   LogoutIcon,
   StandingsIcon,
 } from './icons'
-import { useAuth } from './useAuth'
+import { useAuth } from '../auth/useAuth'
 
 // AppShell is the frame around every logged-in page: the top bar (brand,
 // links on wide screens, the user and logout), the page, and the tab bar on
