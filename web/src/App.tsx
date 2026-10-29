@@ -3,12 +3,12 @@ import { ActivitiesPage } from './pages/ActivitiesPage'
 import { AppShell } from './components/AppShell'
 import { LeaderboardPage } from './pages/LeaderboardPage'
 import { LoginPage } from './pages/LoginPage'
-import { PageHeader } from './components/PageHeader'
+import { RulesPage } from './pages/RulesPage'
 import { RequireAuth } from './auth/RequireAuth'
 
 // AppRoutes is the route table. /login is public; every other page sits
 // behind RequireAuth (logged-in users only) inside AppShell (top bar and tab
-// bar). The activities and rules pages are placeholders until #20.
+// bar).
 export function AppRoutes() {
   return (
     <Routes>
@@ -17,7 +17,7 @@ export function AppRoutes() {
         <Route element={<AppShell />}>
           <Route index element={<LeaderboardPage />} />
           <Route path="activities" element={<ActivitiesPage />} />
-          <Route path="rules" element={<PageHeader title="Cómo se puntúa" />} />
+          <Route path="rules" element={<RulesPage />} />
         </Route>
       </Route>
     </Routes>
