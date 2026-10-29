@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // The Go package internal/spa embeds the build (go:embed only sees files at
+  // or below its package). Vite empties a folder outside web/ only when told.
+  build: { outDir: '../internal/spa/dist', emptyOutDir: true },
   test: {
     environment: 'jsdom',
     setupFiles: './src/test-setup.ts',

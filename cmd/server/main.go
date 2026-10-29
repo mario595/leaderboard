@@ -18,6 +18,7 @@ import (
 	"github.com/mario595/leaderboard/internal/config"
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
+	"github.com/mario595/leaderboard/internal/spa"
 	"github.com/mario595/leaderboard/internal/store"
 	"github.com/mario595/leaderboard/internal/strava"
 	"github.com/mario595/leaderboard/internal/webhook"
@@ -139,6 +140,7 @@ func runServer() error {
 			Seasons:    store.NewSeasonStore(db),
 			Standings:  activityStore,
 			Activities: activityStore,
+			SPA:        spa.Handler(),
 		},
 	)
 

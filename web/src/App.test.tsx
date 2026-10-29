@@ -59,6 +59,26 @@ describe('routing by auth state', () => {
     ).toBeInTheDocument()
   })
 
+  it('sends an unknown path to the leaderboard', async () => {
+    mockServer({ me: ana })
+
+    renderAt('/nope/really')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Clasificación' }),
+    ).toBeInTheDocument()
+  })
+
+  it('sends an anonymous visitor on an unknown path to the login page', async () => {
+    mockServer({ me: 401 })
+
+    renderAt('/nope')
+
+    expect(
+      await screen.findByRole('link', { name: /strava/i }),
+    ).toHaveAttribute('href', '/auth/strava')
+  })
+
   it('protects every page, not only the home page', async () => {
     mockServer({ me: 401 })
 

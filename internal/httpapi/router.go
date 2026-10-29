@@ -22,6 +22,7 @@ type Deps struct {
 	Seasons    seasonFinder
 	Standings  standingsQuerier
 	Activities activityLister
+	SPA        http.Handler
 }
 
 // NewRouter builds the http router with all the application routes.
@@ -57,6 +58,15 @@ func NewRouter(deps Deps) http.Handler {
 			r.Get("/strava", deps.Webhook.Verify)
 			r.Post("/strava", deps.Webhook.Receive)
 		})
+	}
+
+	// The frontend gets every GET or HEAD path no other route matched; chi tries
+	// a catch-all last. Not r.NotFound: chi hands that down to the /api and
+	// /webhook sub-routers, so their unknown paths would answer with the app's
+	// HTML instead of a 404. chi does not answer HEAD for GET routes on its own.
+	if deps.SPA != nil {
+		r.Get("/*", deps.SPA.ServeHTTP)
+		r.Head("/*", deps.SPA.ServeHTTP)
 	}
 
 	return r

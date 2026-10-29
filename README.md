@@ -18,13 +18,13 @@ Work in progress. What exists today:
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
 - A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
-- A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`)
+- A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: serving the frontend from the Go binary, and loading activities from before signing up. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: loading activities from before signing up, and a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -102,7 +102,16 @@ The frontend lives in `web/`. In development the Vite dev server serves it on po
 3. Run the Go server (`make run`) and, in a second terminal, `make web-dev`.
 4. Open <http://localhost:5173> and sign in with Strava.
 
-Until the frontend is served by the Go binary (#21), <http://localhost:8080> has no pages, only the API.
+### 5. Run the built binary
+
+In production one binary serves the pages and the API on the same port: `make build` builds the frontend into `internal/spa/dist/` and then the Go binary, which embeds it (`go:embed`). To try it locally, with Strava sending you back to port 8080 instead of the dev server:
+
+```
+make build
+(set -a; . ./.env; set +a; BASE_URL=http://localhost:8080 ./bin/server)
+```
+
+Open <http://localhost:8080>. Any path that is not a file, the API, the webhook or the health check gets the app's `index.html`, so reloading `/activities` works. A missing file (`/assets/old.js`) is a 404. Files under `/assets/` have a content hash in their names and are cached for a year; `index.html` is always revalidated, so a new deploy shows up on the next load. A binary built without the frontend (plain `go build`) answers pages with `503` and a hint to run `make web-build`.
 
 ### HTTP endpoints
 
@@ -117,6 +126,7 @@ Until the frontend is served by the Go binary (#21), <http://localhost:8080> has
 | `GET /api/leaderboard` | signed in | Ranking for the season covering today (UTC date); `?season=<id>` for another season. Every member is listed, with 0 points if they have none; ties share a rank (1, 2, 2, 4). `404` when no season covers today. |
 | `GET /webhook/strava` | public | Strava's subscription check: echoes the challenge if the verify token matches |
 | `POST /webhook/strava` | public | Strava webhook events; stored, then processed in the background |
+| `GET /*` | public | The frontend: a built file, or `index.html` for any other path (the pages check the session themselves through `/api/me`) |
 
 Everything under `/api` answers `401` with `{"error": "..."}` when nobody is signed in. Sessions are stored in the database and sent in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` when `ENV=prod`) that lasts 30 days.
 
@@ -160,7 +170,7 @@ Create the subscription:
 | Command | What it does |
 |---|---|
 | `make run` | Load `.env` and start the server |
-| `make build` | Build `bin/server` |
+| `make build` | Build the frontend, then `bin/server` with the frontend embedded |
 | `make test` | Run all tests |
 | `make vet` | Run `go vet` |
 | `make lint` | Run golangci-lint |
@@ -168,7 +178,7 @@ Create the subscription:
 | `make web-dev` | Start the Vite dev server on port 5173 |
 | `make web-test` | Run the frontend tests (Vitest) |
 | `make web-check` | Everything CI checks on the frontend: lint, type-check, format, tests, build |
-| `make web-build` | Build the frontend into `web/dist/` |
+| `make web-build` | Build the frontend into `internal/spa/dist/` (embedded by `make build`) |
 
 CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s frontend checks on every pull request. Work happens on one branch per ticket (`feature/<number>-<name>`) and lands through a pull request that closes its issue.
 
@@ -176,16 +186,24 @@ CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s f
 
 ```
 cmd/server/            entry point: web server and the `season` subcommands
-internal/auth/         Strava OAuth login and callback
+internal/activity/     saving and deleting activities, with the per-day point recompute
+internal/auth/         Strava OAuth login and callback, logout
 internal/config/       settings read from the environment
-internal/httpapi/      router, health endpoint, middleware
+internal/httpapi/      router, middleware, JSON API handlers
 internal/logging/      structured logger setup
-internal/store/        SQLite access, embedded SQL migrations, users and seasons
+internal/scoring/      the point rules (pure functions)
+internal/spa/          serves the embedded frontend build
+internal/store/        SQLite access, embedded SQL migrations, one store per table
+internal/strava/       Strava API client with token refresh
+internal/testutil/     shared test assertions
+internal/webhook/      Strava webhook endpoint
+internal/worker/       background processing of webhook events
+web/                   React frontend (Vite, TypeScript); builds into internal/spa/dist/
 ```
 
 ### Stack
 
-Go with the standard library's `net/http` and the [chi](https://github.com/go-chi/chi) router, SQLite through `database/sql` (pure-Go driver [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)) with [goose](https://github.com/pressly/goose) migrations, and [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) for Strava. A React frontend is planned.
+Go with the standard library's `net/http` and the [chi](https://github.com/go-chi/chi) router, SQLite through `database/sql` (pure-Go driver [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)) with [goose](https://github.com/pressly/goose) migrations, and [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) for Strava. The frontend is React with TypeScript, built by [Vite](https://vite.dev) and embedded in the binary with `go:embed`.
 
 ## Your data
 
