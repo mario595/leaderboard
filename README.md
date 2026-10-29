@@ -18,13 +18,13 @@ Work in progress. What exists today:
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
 - A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
-- A web frontend (React, TypeScript, Vite) with the Strava login page, the app frame and the leaderboard page (`web/`)
-- A personal activity list: each of the member's activities in a season, newest first, with points and the competition flag, paginated (`GET /api/me/activities`)
+- A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`)
+- A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: the activities and rules pages, and serving the frontend from the Go binary. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: serving the frontend from the Go binary, and loading activities from before signing up. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -113,7 +113,7 @@ Until the frontend is served by the Go binary (#21), <http://localhost:8080> has
 | `GET /auth/strava/callback` | public | Strava redirects here; creates the session |
 | `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
 | `GET /api/me` | signed in | The current user, without any token |
-| `GET /api/me/activities` | signed in | The member's own activities in the season (default: current; `?season=<id>`), newest first, every activity with its points (often 0) and competition flag. Pages of `?limit=` (1 to 100, default 50); pass the response's `nextCursor` as `?cursor=` for the next page (`null` on the last one). Moving time in seconds, distance in metres. |
+| `GET /api/me/activities` | signed in | The member's own activities in the season (default: current; `?season=<id>`), newest first, every activity with its points (often 0), competition flag and `zeroReason` (why it scored nothing: `sport`, `short` or `daily_cap`; `""` when it scored). Pages of `?limit=` (1 to 100, default 50); pass the response's `nextCursor` as `?cursor=` for the next page (`null` on the last one). Moving time in seconds, distance in metres. |
 | `GET /api/leaderboard` | signed in | Ranking for the season covering today (UTC date); `?season=<id>` for another season. Every member is listed, with 0 points if they have none; ties share a rank (1, 2, 2, 4). `404` when no season covers today. |
 | `GET /webhook/strava` | public | Strava's subscription check: echoes the challenge if the verify token matches |
 | `POST /webhook/strava` | public | Strava webhook events; stored, then processed in the background |
