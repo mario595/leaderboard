@@ -1,4 +1,4 @@
-import { ApiError, getJSON, type Me } from './api'
+import { ApiError, getJSON, type Me } from '../api/api'
 import { useState, useEffect, type ReactNode } from 'react'
 import { AuthContext, type AuthState } from './useAuth'
 

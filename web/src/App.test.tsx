@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRoutes } from './App'
-import { AuthProvider } from './auth'
+import { AuthProvider } from './auth/auth'
 
 const ana = { id: 1, stravaId: 12345678, firstName: 'Ana', lastName: 'García' }
 

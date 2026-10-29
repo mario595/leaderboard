@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router'
-import { AlertIcon } from './icons'
+import { AlertIcon } from '../components/icons'
 import { useAuth } from './useAuth'
 
 // RequireAuth guards every page below it: nothing while the session is being

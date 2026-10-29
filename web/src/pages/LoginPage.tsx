@@ -1,9 +1,9 @@
 import { Navigate, useSearchParams } from 'react-router'
-import connectButton from './assets/strava-connect.svg'
-import poweredByBlack from './assets/strava-powered-by-black.svg'
-import poweredByWhite from './assets/strava-powered-by-white.svg'
-import { AlertIcon, BrandIcon } from './icons'
-import { useAuth } from './useAuth'
+import connectButton from '../assets/strava-connect.svg'
+import poweredByBlack from '../assets/strava-powered-by-black.svg'
+import poweredByWhite from '../assets/strava-powered-by-white.svg'
+import { AlertIcon, BrandIcon } from '../components/icons'
+import { useAuth } from '../auth/useAuth'
 
 // Messages for the reasons the OAuth callback adds as ?error= (see
 // internal/auth/callback.go). An unknown reason gets the generic one.

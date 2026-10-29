@@ -1,5 +1,5 @@
-import type { Standing } from './api'
-import { initials } from './format'
+import type { Standing } from '../api/api'
+import { initials } from '../api/format'
 
 // Medal colours for the podium, by rank: members tied at 2 both get silver.
 const medals: Record<number, string> = { 1: 'gold', 2: 'silver', 3: 'bronze' }

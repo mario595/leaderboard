@@ -1,13 +1,13 @@
 import { Link } from 'react-router'
-import type { Leaderboard } from './api'
-import { EmptyState } from './EmptyState'
-import { formatSeasonRange } from './format'
-import { AlertIcon, CalendarIcon } from './icons'
-import { PageHeader } from './PageHeader'
-import { StandingsRow } from './StandingsRow'
-import { StatSummary } from './StatSummary'
-import { useApi } from './useApi'
-import { useAuth } from './useAuth'
+import type { Leaderboard } from '../api/api'
+import { EmptyState } from '../components/EmptyState'
+import { formatSeasonRange } from '../api/format'
+import { AlertIcon, CalendarIcon } from '../components/icons'
+import { PageHeader } from '../components/PageHeader'
+import { StandingsRow } from '../components/StandingsRow'
+import { StatSummary } from '../components/StatSummary'
+import { useApi } from '../api/useApi'
+import { useAuth } from '../auth/useAuth'
 
 // LeaderboardPage shows the current season's ranking: the user's rank and
 // points, then every member in the API's order (the API ranks; ties share a
