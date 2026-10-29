@@ -43,6 +43,10 @@ type activityResponse struct {
 	Distance    float64 `json:"distance"`
 	Competition bool    `json:"competition"`
 	Points      int     `json:"points"`
+	// ZeroReason says why the activity scored nothing: "sport" (not a
+	// counted sport), "short" (under 30 minutes) or "daily_cap" (two better
+	// activities that day); "" when it scored.
+	ZeroReason string `json:"zeroReason"`
 }
 
 // activitiesResponse is the body of GET /api/me/activities. NextCursor is
@@ -137,7 +141,8 @@ func activitiesHandler(seasons seasonFinder, activities activityLister, now func
 					WorkoutType: act.WorkoutType,
 					Description: act.Description,
 				}.IsCompetition(),
-				Points: act.Points,
+				Points:     act.Points,
+				ZeroReason: zeroReason(act),
 			})
 		}
 
@@ -147,6 +152,23 @@ func activitiesHandler(seasons seasonFinder, activities activityLister, now func
 			Season:     newSeasonResponse(season),
 		})
 	}
+}
+
+// zeroReason explains a 0-point activity with the scoring rules, checked in
+// order so the first reason that applies is the one given: a short e-bike
+// ride is "sport", since it would not count even if it were longer. Points
+// are 0 for an eligible activity only when the daily cap took them.
+func zeroReason(a store.Activity) string {
+	if a.Points > 0 {
+		return ""
+	}
+	if scoring.DisciplineOf(a.SportType) == scoring.DisciplineNone {
+		return "sport"
+	}
+	if a.MovingTime < scoring.MinMovingTime {
+		return "short"
+	}
+	return "daily_cap"
 }
 
 // parseLimit returns the page size: 50 when limitParam is empty, otherwise

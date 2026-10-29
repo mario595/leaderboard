@@ -97,19 +97,50 @@ func TestActivitiesHandler_firstPage(t *testing.T) {
 		"season": {"id": 3, "name": "Autumn 2026", "startDate": "2026-09-01", "endDate": "2026-12-31"},
 		"activities": [
 			{"id": 104, "date": "2026-10-17", "startLocal": "2026-10-17T09:00:00", "sportType": "GravelRide",
-			 "movingTime": 8102, "distance": 61234, "competition": true, "points": 4},
+			 "movingTime": 8102, "distance": 61234, "competition": true, "points": 4, "zeroReason": ""},
 			{"id": 103, "date": "2026-10-16", "startLocal": "2026-10-16T18:00:00", "sportType": "Run",
-			 "movingTime": 2700, "distance": 9000, "competition": true, "points": 4},
+			 "movingTime": 2700, "distance": 9000, "competition": true, "points": 4, "zeroReason": ""},
 			{"id": 102, "date": "2026-10-16", "startLocal": "2026-10-16T07:00:00", "sportType": "Walk",
-			 "movingTime": 3600, "distance": 5000, "competition": false, "points": 0},
+			 "movingTime": 3600, "distance": 5000, "competition": false, "points": 0, "zeroReason": "sport"},
 			{"id": 101, "date": "2026-10-15", "startLocal": "2026-10-15T21:30:00", "sportType": "Run",
-			 "movingTime": 1200, "distance": 3000, "competition": false, "points": 0}
+			 "movingTime": 1200, "distance": 3000, "competition": false, "points": 0, "zeroReason": "short"}
 		],
 		"nextCursor": null
 	}`)
 	// The description is stored only for the #competition check: never sent.
 	if strings.Contains(rec.Body.String(), "description") || strings.Contains(rec.Body.String(), "#competition") {
 		t.Errorf("body %s exposes the description", rec.Body.String())
+	}
+}
+
+func TestZeroReason(t *testing.T) {
+	activity := func(sport string, moving time.Duration, points int) store.Activity {
+		return store.Activity{SportType: sport, MovingTime: moving, Points: points}
+	}
+	testCases := []struct {
+		name string
+		a    store.Activity
+		want string
+	}{
+		// Positive control: an activity that scored needs no reason.
+		{name: "scored", a: activity("Run", 45*time.Minute, 2), want: ""},
+		{name: "competition scored", a: activity("Swim", 45*time.Minute, 4), want: ""},
+		{name: "sport that does not count", a: activity("Walk", time.Hour, 0), want: "sport"},
+		{name: "e-bike", a: activity("EBikeRide", time.Hour, 0), want: "sport"},
+		// Two reasons apply; the sport explains it (a longer e-bike ride would
+		// not score either).
+		{name: "short e-bike ride", a: activity("EBikeRide", 10*time.Minute, 0), want: "sport"},
+		{name: "too short", a: activity("Run", 20*time.Minute, 0), want: "short"},
+		// The boundary is the scoring rule's: 30 minutes counts (#9).
+		{name: "29:59 is short", a: activity("Run", 29*time.Minute+59*time.Second, 0), want: "short"},
+		// Eligible but 0 points: two better activities that day took the slots.
+		{name: "exactly 30 minutes, capped", a: activity("Run", 30*time.Minute, 0), want: "daily_cap"},
+		{name: "eligible ride, capped", a: activity("GravelRide", 2*time.Hour, 0), want: "daily_cap"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.AssertEqual(t, "zeroReason", tc.want, zeroReason(tc.a))
+		})
 	}
 }
 
