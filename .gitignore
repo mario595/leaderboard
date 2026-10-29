@@ -26,7 +26,10 @@ go.work.sum
 
 # Frontend (web/)
 node_modules/
-web/dist/
+# The build lands here (see web/vite.config.ts); the placeholder keeps go:embed
+# compiling before the first build.
+/internal/spa/dist/*
+!/internal/spa/dist/.gitkeep
 *.tsbuildinfo
 npm-debug.log*
 

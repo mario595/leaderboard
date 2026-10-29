@@ -9,7 +9,8 @@ STRAVA_SUBSCRIPTIONS = https://www.strava.com/api/v3/push_subscriptions
 run:
 	$(LOAD_ENV); go run ./cmd/server
 
-build:
+# The binary embeds the frontend (internal/spa), so build that first.
+build: web-build
 	go build -o bin/server ./cmd/server
 
 test:
