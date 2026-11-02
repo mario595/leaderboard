@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -246,6 +247,291 @@ func TestDeleteByStravaID(t *testing.T) {
 	}
 	testutil.AssertEqual(t, "deleted non-user with events", false, deleted)
 	testutil.AssertEqual(t, "non-user's events", 0, countRows(t, db, "webhook_events", "owner_id", neverUser))
+}
+
+func TestLogin(t *testing.T) {
+	s := newTestStore(t)
+	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Hour)
+	s.now = func() time.Time { return t0 }
+	luke, err := s.Upsert(t.Context(), User{
+		StravaID: 1, FirstName: "Luke", LastName: "Skywalker",
+		AccessToken: "luke-access", RefreshToken: "luke-refresh", TokenExpiresAt: t0,
+	})
+	if err != nil {
+		t.Fatalf("upsert luke: %v", err)
+	}
+	if _, err := s.Upsert(t.Context(), User{
+		StravaID: 2, FirstName: "Leia", LastName: "Organa",
+		AccessToken: "leia-access", RefreshToken: "leia-refresh", TokenExpiresAt: t0,
+	}); err != nil {
+		t.Fatalf("upsert leia: %v", err)
+	}
+
+	// Strava sends the current name and new tokens on every login.
+	s.now = func() time.Time { return t1 }
+	newExpiry := t1.Add(6 * time.Hour)
+	got, err := s.Login(t.Context(), User{
+		StravaID: 1, FirstName: "Anakin", LastName: "Vader",
+		AccessToken: "new-access", RefreshToken: "new-refresh", TokenExpiresAt: newExpiry,
+	})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+
+	testutil.AssertEqual(t, "ID", luke.ID, got.ID)
+	testutil.AssertEqual(t, "StravaID", int64(1), got.StravaID)
+	testutil.AssertEqual(t, "FirstName", "Anakin", got.FirstName)
+	testutil.AssertEqual(t, "LastName", "Vader", got.LastName)
+	testutil.AssertEqual(t, "AccessToken", "new-access", got.AccessToken)
+	testutil.AssertEqual(t, "RefreshToken", "new-refresh", got.RefreshToken)
+	testutil.AssertTime(t, "TokenExpiresAt", newExpiry, got.TokenExpiresAt)
+	testutil.AssertTime(t, "CreatedAt", t0, got.CreatedAt)
+	testutil.AssertTime(t, "UpdatedAt", t1, got.UpdatedAt)
+
+	// What Login returned is what was stored.
+	stored, err := s.GetByStravaID(t.Context(), 1)
+	if err != nil {
+		t.Fatalf("GetByStravaID luke: %v", err)
+	}
+	testutil.AssertEqual(t, "stored FirstName", "Anakin", stored.FirstName)
+	testutil.AssertEqual(t, "stored AccessToken", "new-access", stored.AccessToken)
+
+	// Positive control for the WHERE clause: the other user is untouched.
+	other, err := s.GetByStravaID(t.Context(), 2)
+	if err != nil {
+		t.Fatalf("GetByStravaID leia: %v", err)
+	}
+	testutil.AssertEqual(t, "other user FirstName", "Leia", other.FirstName)
+	testutil.AssertEqual(t, "other user AccessToken", "leia-access", other.AccessToken)
+}
+
+func TestLogin_unknownAthlete(t *testing.T) {
+	s := newTestStore(t)
+
+	_, err := s.Login(t.Context(), User{StravaID: 1, FirstName: "Luke", AccessToken: "a", RefreshToken: "r"})
+
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("Login unknown athlete: got error %v, wanted ErrNotFound", err)
+	}
+	// Login never creates a user: that needs an invitation.
+	if _, err := s.GetByStravaID(t.Context(), 1); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetByStravaID after Login: got error %v, wanted ErrNotFound", err)
+	}
+}
+
+func TestSignUp(t *testing.T) {
+	s := newTestStore(t)
+	invitations := NewInvitationStore(s.db)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	inv, err := invitations.Create(t.Context(), 2, time.Time{})
+	if err != nil {
+		t.Fatalf("create invitation: %v", err)
+	}
+	expiry := now.Add(6 * time.Hour)
+
+	got, err := s.SignUp(t.Context(), User{
+		StravaID: 1, FirstName: "Luke", LastName: "Skywalker",
+		AccessToken: "luke-access", RefreshToken: "luke-refresh", TokenExpiresAt: expiry,
+	}, inv.Code)
+	if err != nil {
+		t.Fatalf("SignUp: %v", err)
+	}
+
+	if got.ID == 0 {
+		t.Error("ID is 0, want the stored row's ID")
+	}
+	testutil.AssertEqual(t, "StravaID", int64(1), got.StravaID)
+	testutil.AssertEqual(t, "FirstName", "Luke", got.FirstName)
+	testutil.AssertEqual(t, "LastName", "Skywalker", got.LastName)
+	testutil.AssertEqual(t, "AccessToken", "luke-access", got.AccessToken)
+	testutil.AssertEqual(t, "RefreshToken", "luke-refresh", got.RefreshToken)
+	testutil.AssertTime(t, "TokenExpiresAt", expiry, got.TokenExpiresAt)
+	testutil.AssertTime(t, "CreatedAt", now, got.CreatedAt)
+	testutil.AssertTime(t, "UpdatedAt", now, got.UpdatedAt)
+
+	if _, err := s.GetByStravaID(t.Context(), 1); err != nil {
+		t.Errorf("GetByStravaID after SignUp: %v", err)
+	}
+	testutil.AssertEqual(t, "invitation uses", 1, findInvitation(t, invitations, inv.Code).Uses)
+	testutil.AssertEqual(t, "users.invitation_id", inv.ID, userInvitationID(t, s.db, got.ID))
+}
+
+// Every reason an invitation cannot be used gives the same error, creates no
+// user and takes no seat.
+func TestSignUp_invalidInvitation(t *testing.T) {
+	created := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	expires := created.Add(24 * time.Hour)
+
+	tests := []struct {
+		name string
+		// setup returns the code to sign up with, and when.
+		setup func(t *testing.T, s *UserStore, inv *InvitationStore) (code string, at time.Time)
+	}{
+		{"empty code", func(t *testing.T, s *UserStore, inv *InvitationStore) (string, time.Time) {
+			createTestInvitation(t, inv, 1, time.Time{})
+			return "", created
+		}},
+		{"unknown code", func(t *testing.T, s *UserStore, inv *InvitationStore) (string, time.Time) {
+			createTestInvitation(t, inv, 1, time.Time{})
+			return "NOSUCHCODE", created
+		}},
+		{"used up", func(t *testing.T, s *UserStore, inv *InvitationStore) (string, time.Time) {
+			code := createTestInvitation(t, inv, 1, time.Time{}).Code
+			if _, err := s.SignUp(t.Context(), User{StravaID: 2, AccessToken: "a", RefreshToken: "r"}, code); err != nil {
+				t.Fatalf("first SignUp: %v", err)
+			}
+			return code, created
+		}},
+		{"revoked", func(t *testing.T, s *UserStore, inv *InvitationStore) (string, time.Time) {
+			code := createTestInvitation(t, inv, 1, time.Time{}).Code
+			if err := inv.Revoke(t.Context(), code); err != nil {
+				t.Fatalf("Revoke: %v", err)
+			}
+			return code, created
+		}},
+		{"expires at that second", func(t *testing.T, s *UserStore, inv *InvitationStore) (string, time.Time) {
+			return createTestInvitation(t, inv, 1, expires).Code, expires
+		}},
+		{"expired", func(t *testing.T, s *UserStore, inv *InvitationStore) (string, time.Time) {
+			return createTestInvitation(t, inv, 1, expires).Code, expires.Add(time.Hour)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStore(t)
+			invitations := NewInvitationStore(s.db)
+			s.now = func() time.Time { return created }
+			invitations.now = func() time.Time { return created }
+			code, at := tt.setup(t, s, invitations)
+			usesBefore := totalUses(t, invitations)
+			s.now = func() time.Time { return at }
+
+			_, err := s.SignUp(t.Context(), User{StravaID: 1, AccessToken: "a", RefreshToken: "r"}, code)
+
+			if !errors.Is(err, ErrInvalidInvitation) {
+				t.Errorf("SignUp: got error %v, wanted ErrInvalidInvitation", err)
+			}
+			if _, err := s.GetByStravaID(t.Context(), 1); !errors.Is(err, ErrNotFound) {
+				t.Errorf("GetByStravaID after a rejected SignUp: got error %v, wanted ErrNotFound", err)
+			}
+			testutil.AssertEqual(t, "invitation uses", usesBefore, totalUses(t, invitations))
+		})
+	}
+}
+
+// Positive control for the expiry cases above: one second before it expires,
+// the invitation still works.
+func TestSignUp_justBeforeExpiry(t *testing.T) {
+	s := newTestStore(t)
+	invitations := NewInvitationStore(s.db)
+	created := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	invitations.now = func() time.Time { return created }
+	expires := created.Add(24 * time.Hour)
+	code := createTestInvitation(t, invitations, 1, expires).Code
+	s.now = func() time.Time { return expires.Add(-time.Second) }
+
+	if _, err := s.SignUp(t.Context(), User{StravaID: 1, AccessToken: "a", RefreshToken: "r"}, code); err != nil {
+		t.Errorf("SignUp one second before expiry: %v", err)
+	}
+}
+
+// An athlete who already has an account fails the INSERT. The transaction must
+// give the seat back.
+func TestSignUp_existingAthleteKeepsTheSeat(t *testing.T) {
+	s := newTestStore(t)
+	invitations := NewInvitationStore(s.db)
+	if _, err := s.Upsert(t.Context(), User{StravaID: 1, FirstName: "Luke", AccessToken: "a", RefreshToken: "r"}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	code := createTestInvitation(t, invitations, 1, time.Time{}).Code
+
+	_, err := s.SignUp(t.Context(), User{StravaID: 1, FirstName: "Anakin", AccessToken: "a", RefreshToken: "r"}, code)
+
+	if err == nil {
+		t.Fatal("SignUp of an existing athlete: got no error")
+	}
+	if errors.Is(err, ErrInvalidInvitation) {
+		t.Errorf("SignUp of an existing athlete: got %v, the invitation is not the problem", err)
+	}
+	testutil.AssertEqual(t, "invitation uses", 0, findInvitation(t, invitations, code).Uses)
+	stored, err := s.GetByStravaID(t.Context(), 1)
+	if err != nil {
+		t.Fatalf("GetByStravaID: %v", err)
+	}
+	testutil.AssertEqual(t, "FirstName", "Luke", stored.FirstName)
+}
+
+// Ten athletes race for the last seat: exactly one gets it. Run with -race.
+func TestSignUp_concurrentLastSeat(t *testing.T) {
+	s := newTestStore(t)
+	invitations := NewInvitationStore(s.db)
+	code := createTestInvitation(t, invitations, 1, time.Time{}).Code
+
+	const athletes = 10
+	errs := make([]error, athletes)
+	var wg sync.WaitGroup
+	for i := range athletes {
+		wg.Go(func() {
+			_, errs[i] = s.SignUp(t.Context(), User{StravaID: int64(i + 1), AccessToken: "a", RefreshToken: "r"}, code)
+		})
+	}
+	wg.Wait()
+
+	signedUp := 0
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			signedUp++
+		case errors.Is(err, ErrInvalidInvitation):
+		default:
+			t.Errorf("athlete %d: unexpected error %v", i+1, err)
+		}
+	}
+	testutil.AssertEqual(t, "athletes signed up", 1, signedUp)
+	testutil.AssertEqual(t, "invitation uses", 1, findInvitation(t, invitations, code).Uses)
+	var users int
+	if err := s.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM users").Scan(&users); err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	testutil.AssertEqual(t, "users", 1, users)
+}
+
+func createTestInvitation(t *testing.T, s *InvitationStore, maxUses int, expiresAt time.Time) Invitation {
+	t.Helper()
+	inv, err := s.Create(t.Context(), maxUses, expiresAt)
+	if err != nil {
+		t.Fatalf("create invitation: %v", err)
+	}
+	return inv
+}
+
+// totalUses sums the uses of every invitation.
+func totalUses(t *testing.T, s *InvitationStore) int {
+	t.Helper()
+	list, err := s.List(t.Context())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	total := 0
+	for _, inv := range list {
+		total += inv.Uses
+	}
+	return total
+}
+
+// userInvitationID reads users.invitation_id, which User does not expose.
+func userInvitationID(t *testing.T, db *sql.DB, userID int64) int64 {
+	t.Helper()
+	var id sql.NullInt64
+	if err := db.QueryRowContext(t.Context(), "SELECT invitation_id FROM users WHERE id = ?", userID).Scan(&id); err != nil {
+		t.Fatalf("read invitation_id: %v", err)
+	}
+	if !id.Valid {
+		t.Fatalf("user %d has no invitation_id", userID)
+	}
+	return id.Int64
 }
 
 // countRows counts the rows of table whose column equals value. table and
