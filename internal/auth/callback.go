@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -33,6 +34,9 @@ const (
 	// loginFailed: anything else (bad or missing state or code, Strava or
 	// database failure). Trying again may work.
 	loginFailed = "failed"
+	// loginInvitation: a new athlete without a usable invitation (none,
+	// unknown, used up, revoked or expired).
+	loginInvitation = "invitation"
 )
 
 // SessionUserIDKey is the session key under which the id of the logged-in user
@@ -44,6 +48,8 @@ const SessionUserIDKey = "UserID"
 // cookie set by Login, the authorization code is present, and the user granted
 // the activity:read (or activity:read_all) scope. The state cookie is
 // cleared as soon as it has been read, so each state can be used only once.
+// A known athlete is logged in. A new one is signed up with the invitation code
+// that Invite left in the session, and turned away without one.
 // Every outcome is a redirect back to the app: "/" when the user is logged in,
 // "/login?error=<reason>" otherwise (see fail).
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
@@ -103,16 +109,44 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.userStore.Upsert(r.Context(), store.User{
+	// Popped on every path: a code is used for one login attempt at most, and
+	// never lingers in the session of someone who already has an account.
+	invitationCode := h.sessions.PopString(r.Context(), invitationKey)
+
+	user := store.User{
 		StravaID:       a.ID,
 		FirstName:      a.FirstName,
 		LastName:       a.LastName,
 		AccessToken:    token.AccessToken,
 		RefreshToken:   token.RefreshToken,
 		TokenExpiresAt: token.Expiry,
-	})
-	if err != nil {
-		h.fail(w, r, loginFailed, slog.LevelError, "save user", "error", err)
+	}
+
+	u, err := h.userStore.Login(r.Context(), user)
+	var knownAthlete bool
+	switch {
+	case err == nil:
+		// A known athlete: logged in below.
+		knownAthlete = true
+	case errors.Is(err, store.ErrNotFound):
+		// A new athlete: needs an invitation. The store decides whether the
+		// code is usable.
+		if invitationCode == "" {
+			h.fail(w, r, loginInvitation, slog.LevelInfo, "invitation code required")
+			return
+		}
+		u, err = h.userStore.SignUp(r.Context(), user, invitationCode)
+		if err != nil {
+			if errors.Is(err, store.ErrInvalidInvitation) {
+				h.fail(w, r, loginInvitation, slog.LevelInfo, "sign up athlete: invalid invitation", "strava_id", a.ID)
+				return
+			}
+			h.fail(w, r, loginFailed, slog.LevelError, "sign up athlete", "strava_id", a.ID, "error", err)
+			return
+		}
+		h.logger.Info("user signed up", "strava_id", u.StravaID)
+	default:
+		h.fail(w, r, loginFailed, slog.LevelError, "login", "error", err)
 		return
 	}
 
@@ -122,7 +156,9 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("user logged in", "strava_id", u.StravaID)
+	if knownAthlete {
+		h.logger.Info("user logged in", "strava_id", u.StravaID)
+	}
 
 	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 }

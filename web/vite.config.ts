@@ -18,6 +18,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8080',
       '/auth': 'http://localhost:8080',
+      '/invite': 'http://localhost:8080',
     },
   },
 })

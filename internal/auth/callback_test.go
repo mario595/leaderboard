@@ -191,7 +191,8 @@ func TestCallbackHappyPath(t *testing.T) {
 		t.Errorf("A session cookie was not found")
 	}
 
-	testutil.AssertEqual(t, "upsert calls", 1, users.calls)
+	testutil.AssertEqual(t, "Login calls", 1, users.loginCalls)
+	testutil.AssertEqual(t, "SignUp calls", 0, users.signUpCalls)
 	testutil.AssertEqual(t, "StravaID", int64(4242), users.got.StravaID)
 	testutil.AssertEqual(t, "First Name", "Ada", users.got.FirstName)
 	testutil.AssertEqual(t, "Last Name", "Lovelace", users.got.LastName)

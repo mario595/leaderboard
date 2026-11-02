@@ -235,6 +235,14 @@ func TestRouter_authRoutes(t *testing.T) {
 			wantStatus: http.StatusSeeOther,
 		},
 		{
+			// The invitation link stores the code and starts the login.
+			name:       "invitation link is registered",
+			handler:    authHandler,
+			method:     http.MethodGet,
+			path:       "/invite/ABC234",
+			wantStatus: http.StatusSeeOther,
+		},
+		{
 			name:       "login only accepts GET",
 			handler:    authHandler,
 			method:     http.MethodPost,

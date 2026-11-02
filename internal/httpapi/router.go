@@ -37,6 +37,7 @@ func NewRouter(deps Deps) http.Handler {
 	if deps.Auth != nil {
 		r.Get("/auth/strava", deps.Auth.Login)
 		r.Get("/auth/strava/callback", deps.Auth.Callback)
+		r.Get("/invite/{code}", deps.Auth.Invite)
 		r.Post("/auth/logout", deps.Auth.Logout)
 	}
 
