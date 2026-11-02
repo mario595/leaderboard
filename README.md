@@ -8,7 +8,7 @@ This is also a **learning project** for Go. The code is written step by step, ti
 
 Work in progress. What exists today:
 
-- Sign in with Strava (OAuth), which creates or updates the user and stores the tokens
+- Sign in with Strava (OAuth), which updates a member's name and tokens; new members need an invitation link to sign up, managed with a CLI
 - Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
 - A season model (a named range of dates) with a CLI to create and list seasons
 - The scoring rules below, as a tested Go package (`internal/scoring`)
@@ -119,7 +119,8 @@ Open <http://localhost:8080>. Any path that is not a file, the API, the webhook 
 |---|---|---|
 | `GET /healthz` | public | Health check |
 | `GET /auth/strava` | public | Starts the Strava sign-in |
-| `GET /auth/strava/callback` | public | Strava redirects here; creates the session |
+| `GET /auth/strava/callback` | public | Strava redirects here; logs a member in, or signs up a new one with the invitation from the session, and creates the session |
+| `GET /invite/{code}` | public | An invitation link: keeps the code in the session and starts the Strava sign-in |
 | `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
 | `GET /api/me` | signed in | The current user, without any token |
 | `GET /api/me/activities` | signed in | The member's own activities in the season (default: current; `?season=<id>`), newest first, every activity with its points (often 0), competition flag and `zeroReason` (why it scored nothing: `sport`, `short` or `daily_cap`; `""` when it scored). Pages of `?limit=` (1 to 100, default 50); pass the response's `nextCursor` as `?cursor=` for the next page (`null` on the last one). Moving time in seconds, distance in metres. |
@@ -140,6 +141,18 @@ go run ./cmd/server season list
 ```
 
 Both dates are inclusive, the end must be after the start, and seasons cannot overlap. `go run ./cmd/server` or `go run ./cmd/server serve` starts the web server.
+
+## Invitations
+
+Only people with an invitation link can create an account; members who already have one sign in with the Strava button. Invitations are managed from the same binary:
+
+```
+go run ./cmd/server invite create -uses 10 -expires 168h
+go run ./cmd/server invite list
+go run ./cmd/server invite revoke -code <code>
+```
+
+`create` prints the link to share, `BASE_URL/invite/<code>`: load `.env` first (`set -a; . ./.env; set +a`) so the link points at the right host. `-uses` is how many people can sign up with it (required); `-expires` is how long it stays valid (`168h` is a week; default: never). `list` shows each code with its uses, expiry and whether it was revoked. A new athlete who signs in without a usable invitation (none, unknown, used up, revoked or expired) gets no account and is sent back to the login page with an explanation. Each member records the invitation they signed up with.
 
 ## Strava webhooks
 
@@ -185,9 +198,9 @@ CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s f
 ### Project layout
 
 ```
-cmd/server/            entry point: web server and the `season` subcommands
+cmd/server/            entry point: web server and the `season` and `invite` subcommands
 internal/activity/     saving and deleting activities, with the per-day point recompute
-internal/auth/         Strava OAuth login and callback, logout
+internal/auth/         Strava OAuth login and callback, invitation links, logout
 internal/config/       settings read from the environment
 internal/httpapi/      router, middleware, JSON API handlers
 internal/logging/      structured logger setup
@@ -209,7 +222,7 @@ Go with the standard library's `net/http` and the [chi](https://github.com/go-ch
 
 For each member the app stores:
 
-- the Strava profile basics (athlete ID, first and last name) and the OAuth tokens that let it read activities;
+- the Strava profile basics (athlete ID, first and last name), the OAuth tokens that let it read activities, and which invitation they signed up with;
 - for each counted activity: sport type, local start time, moving time, distance, workout type, description (only to find the `#competition` tag) and the points awarded;
 - the webhook events Strava sends about them, until processed.
 
@@ -219,3 +232,4 @@ Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all 
 
 - The Strava client secret and the users' tokens are secrets. They live in `.env` and in the database file, both git-ignored. They are never logged.
 - Tokens are currently stored in plain text in SQLite. Encrypting them at rest is a planned improvement.
+- An invitation code works like a shared password with a limited number of uses: share links only with the group, and revoke one that leaks (`invite revoke`). Codes are never logged.
