@@ -12,6 +12,8 @@ const loginErrors: Record<string, string> = {
   scope:
     'Necesitamos permiso para ver tus actividades. Vuelve a conectar y deja marcada la casilla de actividades.',
   failed: 'No se pudo iniciar sesión. Inténtalo de nuevo.',
+  invitation:
+    'Necesitas una invitación para unirte. Pide el enlace a tu grupo.',
 }
 
 // LoginPage is the only public page. The Strava button is a plain link to the

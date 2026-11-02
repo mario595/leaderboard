@@ -9,6 +9,11 @@ import (
 // ErrNotFound is returned when a requested row does not exist. Check it with errors.Is.
 var ErrNotFound = errors.New("not found")
 
+// ErrInvalidInvitation is returned when an invitation cannot be created (bad
+// max uses) or used (unknown, used up, revoked or expired). Check it with
+// errors.Is.
+var ErrInvalidInvitation = errors.New("invalid invitation")
+
 // rowScanner is implemented by *sql.Row and *sql.Rows, so one scan function serves both.
 type rowScanner interface {
 	Scan(dest ...any) error

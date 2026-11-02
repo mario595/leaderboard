@@ -21,6 +21,19 @@ const upsertUserQuery = `
 	RETURNING id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at;
 `
 
+const loginUserQuery = `
+	UPDATE users
+	SET first_name = ?, last_name = ?, access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = ?
+	WHERE strava_id = ?
+	RETURNING id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at;
+`
+
+const insertUserQuery = `
+	INSERT INTO users (invitation_id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	RETURNING id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at;
+`
+
 const getByStravaIDQuery = `
 	SELECT id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at
 	FROM users
@@ -50,6 +63,14 @@ const deleteUserByStravaIDQuery = `
 const deleteEventsByOwnerQuery = `
 	DELETE FROM webhook_events
 	WHERE owner_id = ?;
+`
+
+const useInvitationQuery = `
+	UPDATE invitations
+	SET uses = uses + 1
+	WHERE code = ? AND uses < max_uses AND revoked_at IS NULL
+	AND (expires_at IS NULL OR expires_at > ?)
+	RETURNING id;
 `
 
 // User is a Strava user
@@ -99,6 +120,80 @@ func (s *UserStore) Upsert(ctx context.Context, u User) (User, error) {
 	user, err := scanUserRow(r)
 	if err != nil {
 		return User{}, fmt.Errorf("upsert user: %w", err)
+	}
+	return user, nil
+}
+
+// Login updates the name and tokens of an existing athlete, found by Strava
+// ID, and returns the stored user. A new athlete returns ErrNotFound: Login
+// never creates a user (see SignUp).
+func (s *UserStore) Login(ctx context.Context, u User) (User, error) {
+	now := s.now()
+	r := s.db.QueryRowContext(
+		ctx,
+		loginUserQuery,
+		u.FirstName,
+		u.LastName,
+		u.AccessToken,
+		u.RefreshToken,
+		u.TokenExpiresAt.Unix(),
+		now.Unix(),
+		u.StravaID,
+	)
+	user, err := scanUserRow(r)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return User{}, fmt.Errorf("login athlete %d: %w", u.StravaID, err)
+	}
+
+	return user, nil
+}
+
+// SignUp creates a new athlete with the invitation code, in one transaction:
+// it takes one use of the invitation, then inserts the user. A code that is
+// unknown, used up, revoked or expired returns an error wrapping
+// ErrInvalidInvitation. If the insert fails (the athlete already exists), the
+// rollback gives the use back.
+func (s *UserStore) SignUp(ctx context.Context, u User, code string) (User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, fmt.Errorf("sign up athlete %d: %w", u.StravaID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := s.now()
+	var invitationID int64
+	row := tx.QueryRowContext(ctx, useInvitationQuery, code, now.Unix())
+	err = row.Scan(&invitationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, fmt.Errorf("sign up athlete %d: %w", u.StravaID, ErrInvalidInvitation)
+		}
+		return User{}, fmt.Errorf("sign up athlete %d: %w", u.StravaID, err)
+	}
+
+	row = tx.QueryRowContext(
+		ctx,
+		insertUserQuery,
+		invitationID,
+		u.StravaID,
+		u.FirstName,
+		u.LastName,
+		u.AccessToken,
+		u.RefreshToken,
+		u.TokenExpiresAt.Unix(),
+		now.Unix(),
+		now.Unix(),
+	)
+	user, err := scanUserRow(row)
+	if err != nil {
+		return User{}, fmt.Errorf("sign up athlete %d: %w", u.StravaID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return User{}, fmt.Errorf("sign up athlete %d: %w", u.StravaID, err)
 	}
 	return user, nil
 }

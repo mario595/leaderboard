@@ -15,8 +15,12 @@ import (
 // UserStore is the part of the user storage that the login flow needs.
 // It is defined here, where it is consumed, and *store.UserStore satisfies it.
 type UserStore interface {
-	// Upsert inserts the user, or updates it if its Strava ID already exists.
-	Upsert(ctx context.Context, u store.User) (store.User, error)
+	// Login updates a known athlete's name and tokens. It returns
+	// store.ErrNotFound for a new athlete.
+	Login(ctx context.Context, u store.User) (store.User, error)
+	// SignUp creates a new athlete with an invitation code. It returns an
+	// error wrapping store.ErrInvalidInvitation when the code cannot be used.
+	SignUp(ctx context.Context, u store.User, code string) (store.User, error)
 }
 
 var _ UserStore = (*store.UserStore)(nil)

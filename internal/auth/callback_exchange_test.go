@@ -36,20 +36,36 @@ func newFakeStrava(t *testing.T, status int, body string) *fakeStrava {
 	return fs
 }
 
-// fakeUserStore records the user it receives
+// fakeUserStore records what it receives. By default the athlete is known:
+// Login succeeds with ID 1. loginErr = store.ErrNotFound makes them a new
+// athlete; SignUp then succeeds with ID 7, unless signUpErr is set.
 type fakeUserStore struct {
-	got   store.User
-	calls int
-	err   error
+	got         store.User // the user of the last call
+	gotCode     string     // the invitation code SignUp received
+	loginCalls  int
+	signUpCalls int
+	loginErr    error
+	signUpErr   error
 }
 
-func (f *fakeUserStore) Upsert(_ context.Context, u store.User) (store.User, error) {
-	f.calls++
+func (f *fakeUserStore) Login(_ context.Context, u store.User) (store.User, error) {
+	f.loginCalls++
 	f.got = u
-	if f.err != nil {
-		return store.User{}, f.err
+	if f.loginErr != nil {
+		return store.User{}, f.loginErr
 	}
 	u.ID = 1
+	return u, nil
+}
+
+func (f *fakeUserStore) SignUp(_ context.Context, u store.User, code string) (store.User, error) {
+	f.signUpCalls++
+	f.got = u
+	f.gotCode = code
+	if f.signUpErr != nil {
+		return store.User{}, f.signUpErr
+	}
+	u.ID = 7
 	return u, nil
 }
 
@@ -128,7 +144,7 @@ func TestCallback_exchangeFailures(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fs := newFakeStrava(t, tc.stravaStatus, tc.stravaBody)
-			users := &fakeUserStore{err: tc.storeErr}
+			users := &fakeUserStore{loginErr: tc.storeErr}
 			h := newHandlerWith(fs, users)
 			rec := httptest.NewRecorder()
 
@@ -136,7 +152,9 @@ func TestCallback_exchangeFailures(t *testing.T) {
 
 			testutil.AssertEqual(t, "status", http.StatusSeeOther, rec.Code)
 			testutil.AssertEqual(t, "Location", "/login?error=failed", rec.Result().Header.Get("Location"))
-			testutil.AssertEqual(t, "store calls", tc.wantStoreCall, users.calls)
+			testutil.AssertEqual(t, "Login calls", tc.wantStoreCall, users.loginCalls)
+			// A store failure is not "new athlete": no sign-up attempt.
+			testutil.AssertEqual(t, "SignUp calls", 0, users.signUpCalls)
 
 			// A failed login must not leave a session behind.
 			if c := sessionCookieOf(rec); c != nil {
@@ -180,7 +198,7 @@ func TestCallback_stravaTimeout(t *testing.T) {
 
 	testutil.AssertEqual(t, "status", http.StatusSeeOther, rec.Code)
 	testutil.AssertEqual(t, "Location", "/login?error=failed", rec.Result().Header.Get("Location"))
-	testutil.AssertEqual(t, "store calls", 0, users.calls)
+	testutil.AssertEqual(t, "Login calls", 0, users.loginCalls)
 	if elapsed > 2*time.Second {
 		t.Errorf("handler took %v, want it to give up after the client timeout (50ms)", elapsed)
 	}

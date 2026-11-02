@@ -58,6 +58,7 @@ describe('LoginPage', () => {
     ['cancelled', /cancelado/i],
     ['scope', /permiso para ver tus actividades/i],
     ['failed', /inténtalo de nuevo/i],
+    ['invitation', /necesitas una invitación/i],
     // An unknown reason (an old link, a typo) still explains something.
     ['something-else', /inténtalo de nuevo/i],
   ])('explains ?error=%s', async (code, message) => {
