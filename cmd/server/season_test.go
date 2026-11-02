@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -156,6 +157,13 @@ func TestSeasonCommand_overlap(t *testing.T) {
 
 func newTestSeasonStore(t *testing.T) *store.SeasonStore {
 	t.Helper()
+	return store.NewSeasonStore(newTestDB(t))
+}
+
+// newTestDB opens a migrated database in a temporary directory, closed when
+// the test ends.
+func newTestDB(t *testing.T) *sql.DB {
+	t.Helper()
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -165,7 +173,7 @@ func newTestSeasonStore(t *testing.T) *store.SeasonStore {
 	if err := store.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return store.NewSeasonStore(db)
+	return db
 }
 
 func runSeasonCmd(t *testing.T, st *store.SeasonStore, args ...string) (string, error) {

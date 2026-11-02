@@ -45,10 +45,29 @@ func main() {
 			slog.Error("server failed", "error", err)
 			os.Exit(1)
 		}
+	case "invite":
+		if err := runInvite(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "invite failed: %v\n", err)
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintln(os.Stderr, "Invalid command. Use season or serve")
+		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season or serve")
 		os.Exit(2)
 	}
+}
+
+func runInvite(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	st := store.NewInvitationStore(db)
+	return inviteCommand(ctx, st, cfg.BaseURL, args, os.Stdout)
 }
 
 func runSeason(args []string) error {
