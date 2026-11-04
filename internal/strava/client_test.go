@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -317,6 +318,8 @@ type fakeStrava struct {
 	apiCalls     int
 	apiAuth      string
 	apiPath      string
+	listBody     string     // set by tests: replaces the first page of activities
+	listQuery    url.Values // the query of the last activity list request
 }
 
 func newFakeStrava(t *testing.T) *fakeStrava {
@@ -404,6 +407,42 @@ func newFakeStrava(t *testing.T) *fakeStrava {
 		_, _ = w.Write(data)
 	})
 
+	// The athlete's activity list: one page from a fixture (or listBody),
+	// then empty pages.
+	mux.HandleFunc("GET /athlete/activities", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.apiCalls++
+		f.apiAuth = r.Header.Get("Authorization")
+		f.apiPath = r.URL.Path
+		f.listQuery = r.URL.Query()
+		status, delay, usage, body := f.apiStatus, f.delay, f.rateUsage, f.listBody
+		f.mu.Unlock()
+		time.Sleep(delay)
+
+		w.Header().Set("X-RateLimit-Limit", "200,2000")
+		w.Header().Set("X-RateLimit-Usage", usage)
+
+		if status != http.StatusOK {
+			http.Error(w, `{"message":"error"}`, status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") != "1" {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		if body != "" {
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		data, err := os.ReadFile("testdata/activities_page.json")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(data)
+	})
+
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
@@ -437,6 +476,12 @@ func (f *fakeStrava) apiCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.apiCalls
+}
+
+func (f *fakeStrava) lastListQuery() url.Values {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.listQuery
 }
 
 func (f *fakeStrava) lastAPIAuth() string {
