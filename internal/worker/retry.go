@@ -27,21 +27,6 @@ func backoff(attempts int) time.Duration {
 	return result
 }
 
-// nextWindow is when Strava's rate limit lets requests through again: the
-// next 15-minute boundary (UTC), or the next UTC midnight when the daily
-// quota is used up. Zero limits mean the headers were missing: assume the
-// 15-minute window.
-func nextWindow(now time.Time, rl *strava.RateLimitError) time.Time {
-	t := now.UTC()
-	nextQuarterHour := t.Truncate(15 * time.Minute).Add(15 * time.Minute)
-	nextMidnight := time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, time.UTC)
-
-	if rl.DailyLimit > 0 && rl.DailyUsage >= rl.DailyLimit {
-		return nextMidnight
-	}
-	return nextQuarterHour
-}
-
 // handle processes e and marks it: done on success; retried at the next rate
 // limit window when rate limited; failed when Strava rejects the user's
 // token or after maxAttempts failures; otherwise retried with backoff. A
@@ -56,7 +41,7 @@ func (w *Worker) handle(ctx context.Context, e store.Event) {
 
 	var rl *strava.RateLimitError
 	if errors.As(err, &rl) {
-		w.retry(ctx, e.ID, err.Error(), nextWindow(w.now(), rl))
+		w.retry(ctx, e.ID, err.Error(), rl.RetryAt(w.now()))
 		return
 	}
 

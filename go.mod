@@ -3,15 +3,16 @@ module github.com/mario595/leaderboard
 go 1.27.1
 
 require (
+	github.com/alexedwards/scs/sqlite3store v0.0.0-20251002162104-209de6e426de
+	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/oauth2 v0.37.0
+	golang.org/x/time v0.16.0
 	modernc.org/sqlite v1.60.1
 )
 
 require (
-	github.com/alexedwards/scs/sqlite3store v0.0.0-20251002162104-209de6e426de // indirect
-	github.com/alexedwards/scs/v2 v2.9.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

@@ -25,6 +25,7 @@ import (
 	"github.com/mario595/leaderboard/internal/worker"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -128,7 +129,10 @@ func runServer() error {
 	wake := make(chan struct{}, 1)
 
 	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, wake, logger)
-	api := strava.New(oauthCfg, httpClient, userStore, strava.DefaultBaseURL)
+	// One request every 6s, bursts of 5: at most 150 per 15 minutes, under
+	// Strava's 200, leaving room for logins. Shared by every Strava client.
+	limiter := rate.NewLimiter(rate.Every(6*time.Second), 5)
+	api := strava.New(oauthCfg, httpClient, userStore, strava.DefaultBaseURL, limiter)
 	newClient := func(userID int64, tok *oauth2.Token) worker.ActivityFetcher {
 		return api.ForUser(userID, tok)
 	}

@@ -11,18 +11,21 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/time/rate"
 )
 
 // DefaultBaseURL is the Strava API root.
 const DefaultBaseURL = "https://www.strava.com/api/v3"
 
 // API holds what all Strava clients share (OAuth config, base HTTP client,
-// token store, API root) and builds one Client per user with ForUser.
+// token store, API root, rate limiter) and builds one Client per user with
+// ForUser.
 type API struct {
 	cfg     *oauth2.Config
 	http    *http.Client // base client: timeout, transport
 	tokens  TokenStore
 	baseURL string
+	limiter *rate.Limiter // nil: no limit
 }
 
 // Client calls the Strava API on behalf of one user. Its HTTP client adds the
@@ -30,6 +33,7 @@ type API struct {
 type Client struct {
 	http    *http.Client
 	baseURL string
+	limiter *rate.Limiter // the API's, shared with every other client
 }
 
 // TokenStore saves a user's refreshed tokens. It is defined here, where it is
@@ -40,13 +44,15 @@ type TokenStore interface {
 
 // New returns an API. base must have a timeout: every per-user client reuses
 // its Timeout and Transport, for API calls and token refreshes alike. baseURL
-// is the API root, normally DefaultBaseURL.
-func New(cfg *oauth2.Config, base *http.Client, tokens TokenStore, baseURL string) *API {
+// is the API root, normally DefaultBaseURL. limiter paces every request of
+// every client built from this API; nil means no limit.
+func New(cfg *oauth2.Config, base *http.Client, tokens TokenStore, baseURL string, limiter *rate.Limiter) *API {
 	return &API{
 		cfg:     cfg,
 		http:    base,
 		tokens:  tokens,
 		baseURL: baseURL,
+		limiter: limiter,
 	}
 }
 
@@ -67,16 +73,23 @@ func (a *API) ForUser(userID int64, tok *oauth2.Token) *Client {
 			Transport: &oauth2.Transport{Source: src, Base: a.http.Transport},
 		},
 		baseURL: a.baseURL,
+		limiter: a.limiter,
 	}
 }
 
 // get sends a GET request to path (relative to the API root) and decodes the
-// JSON response into out, which must be a pointer. Status 404, 401 and 429
+// JSON response into out, which must be a pointer. It first waits for its turn
+// with the limiter; if ctx ends before that, nothing is sent. Status 404, 401 and 429
 // become ErrNotFound, ErrUnauthorized and *RateLimitError; any other status
 // than 200 is a plain error. A failed token refresh returns an error wrapping
 // *oauth2.RetrieveError, and also ErrUnauthorized when Strava rejected the
 // refresh token.
 func (c *Client) get(ctx context.Context, path string, out any) error {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return fmt.Errorf("strava GET %s: wait for rate limiter: %w", path, err)
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return fmt.Errorf("strava GET %s: %w", path, err)
