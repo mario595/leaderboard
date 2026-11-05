@@ -51,10 +51,31 @@ func main() {
 			fmt.Fprintf(os.Stderr, "invite failed: %v\n", err)
 			os.Exit(1)
 		}
+
+	case "backfill":
+		if err := runBackfill(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "backfill failed: %v\n", err)
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season or serve")
+		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season, backfill or serve")
 		os.Exit(2)
 	}
+}
+
+func runBackfill(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	_, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	seasons := store.NewSeasonStore(db)
+	jobs := store.NewBackfillStore(db)
+	return backfillCommand(ctx, seasons, jobs, args, os.Stdout)
 }
 
 func runInvite(args []string) error {
@@ -125,7 +146,7 @@ func runServer() error {
 	secureCookies := cfg.Env == "prod"
 	sessions, stopSessions := auth.NewSessionManager(db, secureCookies)
 	defer stopSessions()
-	authHandler := auth.New(oauthCfg, userStore, sessions, logger, httpClient, secureCookies)
+	authHandler := auth.New(oauthCfg, userStore, nil, sessions, logger, httpClient, secureCookies)
 	wake := make(chan struct{}, 1)
 
 	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, wake, logger)

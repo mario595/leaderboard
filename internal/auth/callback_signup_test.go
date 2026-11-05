@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -135,4 +136,82 @@ func callbackWithInvitation(t *testing.T, h *Handler, code string) *httptest.Res
 	rec := httptest.NewRecorder()
 	serveCallback(h, rec, req)
 	return rec
+}
+
+// A sign-up tells the listener (the backfill), with the new user.
+func TestCallback_signUpNotifiesTheListener(t *testing.T) {
+	fs := newFakeStrava(t, http.StatusOK, validTokenJSON)
+	listener := &fakeListener{}
+	h := newHandlerWithListener(fs, &fakeUserStore{loginErr: store.ErrNotFound}, listener)
+
+	rec := callbackWithInvitation(t, h, "ABC234")
+
+	testutil.AssertEqual(t, "Location", "/", rec.Result().Header.Get("Location"))
+	if len(listener.got) != 1 {
+		t.Fatalf("listener calls = %d, want 1", len(listener.got))
+	}
+	testutil.AssertEqual(t, "user ID", int64(7), listener.got[0].ID)
+	testutil.AssertEqual(t, "StravaID", int64(4242), listener.got[0].StravaID)
+}
+
+// A failing listener does not fail the login: the account exists, and the
+// backfill can be queued again from the CLI.
+func TestCallback_signUpListenerFails(t *testing.T) {
+	fs := newFakeStrava(t, http.StatusOK, validTokenJSON)
+	listener := &fakeListener{err: errors.New("database is locked")}
+	h := newHandlerWithListener(fs, &fakeUserStore{loginErr: store.ErrNotFound}, listener)
+
+	rec := callbackWithInvitation(t, h, "ABC234")
+
+	testutil.AssertEqual(t, "Location", "/", rec.Result().Header.Get("Location"))
+	session := sessionCookieOf(rec)
+	if session == nil {
+		t.Fatal("no session cookie: the sign-up must still log the user in")
+	}
+	testutil.AssertEqual(t, "user in the session", int64(7), sessionUserID(t, h, session))
+	testutil.AssertEqual(t, "listener calls", 1, len(listener.got))
+}
+
+// Only a sign-up is news: not a known athlete's login, not a rejected
+// sign-up.
+func TestCallback_listenerOnlyOnSignUp(t *testing.T) {
+	tests := []struct {
+		name  string
+		users *fakeUserStore
+	}{
+		{"known athlete logs in", &fakeUserStore{}},
+		{"invalid invitation", &fakeUserStore{loginErr: store.ErrNotFound, signUpErr: store.ErrInvalidInvitation}},
+		{"store failure", &fakeUserStore{loginErr: store.ErrNotFound, signUpErr: errors.New("database is locked")}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newFakeStrava(t, http.StatusOK, validTokenJSON)
+			listener := &fakeListener{}
+			h := newHandlerWithListener(fs, tc.users, listener)
+
+			callbackWithInvitation(t, h, "ABC234")
+
+			testutil.AssertEqual(t, "listener calls", 0, len(listener.got))
+		})
+	}
+}
+
+// A handler without a listener (nil) signs up as before.
+func TestCallback_signUpWithoutListener(t *testing.T) {
+	fs := newFakeStrava(t, http.StatusOK, validTokenJSON)
+	h := newHandlerWithListener(fs, &fakeUserStore{loginErr: store.ErrNotFound}, nil)
+
+	rec := callbackWithInvitation(t, h, "ABC234")
+
+	testutil.AssertEqual(t, "Location", "/", rec.Result().Header.Get("Location"))
+}
+
+type fakeListener struct {
+	got []store.User
+	err error
+}
+
+func (f *fakeListener) SignedUp(_ context.Context, u store.User) error {
+	f.got = append(f.got, u)
+	return f.err
 }

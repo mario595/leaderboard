@@ -14,7 +14,7 @@ import (
 
 func newTestHandler(secureCookies bool) *Handler {
 	cfg := NewOauthConfig("test-id", "test-secret", "http://localhost:8080")
-	return New(cfg, nil, scs.New(), slog.New(slog.DiscardHandler), http.DefaultClient, secureCookies)
+	return New(cfg, nil, nil, scs.New(), slog.New(slog.DiscardHandler), http.DefaultClient, secureCookies)
 }
 
 func newTestDB(t *testing.T) *sql.DB {

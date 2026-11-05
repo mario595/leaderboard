@@ -23,6 +23,14 @@ type UserStore interface {
 	SignUp(ctx context.Context, u store.User, code string) (store.User, error)
 }
 
+// SignUpListener is told about each new member, after a successful sign-up
+// only (not a login). It runs inside the login request, so it must be quick
+// and must not call Strava; an error is logged and the login goes on.
+// *backfill.Runner satisfies it.
+type SignUpListener interface {
+	SignedUp(ctx context.Context, u store.User) error
+}
+
 var _ UserStore = (*store.UserStore)(nil)
 
 // Handler serves the Strava OAuth login and callback endpoints.
@@ -33,11 +41,13 @@ type Handler struct {
 	client        *http.Client
 	secureCookies bool
 	sessions      *scs.SessionManager
+	signUps       SignUpListener
 }
 
-// New returns a Handler. The client is used for the token exchange with Strava
-// and should have a timeout. Set secureCookies to true when serving over HTTPS.
-func New(cfg *oauth2.Config, us UserStore, sessions *scs.SessionManager, logger *slog.Logger, client *http.Client, secureCookies bool) *Handler {
+// New returns a Handler. signUps is told about new members; nil means nobody.
+// The client is used for the token exchange with Strava and should have a
+// timeout. Set secureCookies to true when serving over HTTPS.
+func New(cfg *oauth2.Config, us UserStore, signUps SignUpListener, sessions *scs.SessionManager, logger *slog.Logger, client *http.Client, secureCookies bool) *Handler {
 	return &Handler{
 		oauthCfg:      cfg,
 		userStore:     us,
@@ -45,6 +55,7 @@ func New(cfg *oauth2.Config, us UserStore, sessions *scs.SessionManager, logger 
 		client:        client,
 		secureCookies: secureCookies,
 		sessions:      sessions,
+		signUps:       signUps,
 	}
 }
 

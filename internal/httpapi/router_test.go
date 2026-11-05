@@ -207,7 +207,7 @@ func TestRouter_authRoutes(t *testing.T) {
 	// a callback without state is rejected before anything is saved.
 	authHandler := auth.New(
 		auth.NewOauthConfig("test-id", "test-secret", "http://localhost:8080"),
-		nil, sessions, logger, http.DefaultClient, false,
+		nil, nil, sessions, logger, http.DefaultClient, false,
 	)
 
 	tests := []struct {

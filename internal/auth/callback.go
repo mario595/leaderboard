@@ -144,6 +144,11 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 			h.fail(w, r, loginFailed, slog.LevelError, "sign up athlete", "strava_id", a.ID, "error", err)
 			return
 		}
+		if h.signUps != nil {
+			if err := h.signUps.SignedUp(r.Context(), u); err != nil {
+				h.logger.Error("queue backfill after sign-up", "strava_id", u.StravaID, "error", err)
+			}
+		}
 		h.logger.Info("user signed up", "strava_id", u.StravaID)
 	default:
 		h.fail(w, r, loginFailed, slog.LevelError, "login", "error", err)
