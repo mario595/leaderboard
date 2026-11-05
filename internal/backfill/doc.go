@@ -10,4 +10,8 @@
 // the query is padded by a day on each side and then filtered by local day.
 // Every activity goes through activity.Service.Save, which upserts and
 // recomputes the day: importing twice changes nothing.
+//
+// Runner processes jobs from the backfill_jobs table, one (member, season)
+// each, with the same pattern as the webhook worker: the table is the queue,
+// a channel wakes the runner, and pending jobs survive restarts.
 package backfill
