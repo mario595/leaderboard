@@ -171,6 +171,26 @@ func (s *EventStore) MarkFailed(ctx context.Context, id int64, errMsg string) er
 	return nil
 }
 
+// scheduleRecheckQuery inserts a recheck of an activity event, due at a
+// given time. It keeps the event's object, owner and event time, so the
+// unique key allows one recheck per event.
+const scheduleRecheckQuery = `
+	INSERT INTO webhook_events (object_type, object_id, aspect_type, owner_id, event_time, updates, received_at, next_attempt_at)
+	VALUES (?, ?, 'recheck', ?, ?, '{}', ?, ?)
+	ON CONFLICT (object_type, object_id, aspect_type, event_time) DO NOTHING;
+`
+
+// ScheduleRecheck stores a pending event that makes the worker fetch e's
+// activity again at at: a copy of e with aspect type "recheck" and no
+// updates. Scheduling twice for the same event stores one recheck.
+func (s *EventStore) ScheduleRecheck(ctx context.Context, e Event, at time.Time) error {
+	_, err := s.db.ExecContext(ctx, scheduleRecheckQuery, e.ObjectType, e.ObjectID, e.OwnerID, e.EventTime.Unix(), s.now().Unix(), at.Unix())
+	if err != nil {
+		return fmt.Errorf("schedule recheck event %d: %w", e.ID, err)
+	}
+	return nil
+}
+
 // scanEventRow scans one row in the column order of getNextDueQuery and
 // converts unix seconds back to time.Time. sql.ErrNoRows is returned wrapped:
 // whether no row is an error is the caller's decision.

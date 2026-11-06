@@ -20,6 +20,7 @@ type EventQueue interface {
 	MarkDone(ctx context.Context, id int64) error
 	MarkRetry(ctx context.Context, id int64, errMsg string, next time.Time) error
 	MarkFailed(ctx context.Context, id int64, errMsg string) error
+	ScheduleRecheck(ctx context.Context, e store.Event, at time.Time) error
 }
 
 // Users finds the user owning an event and deletes athletes who
@@ -89,7 +90,7 @@ func (w *Worker) process(ctx context.Context, e store.Event) error {
 	case "athlete":
 		return w.processAthleteEvent(ctx, e)
 	case "activity":
-		return w.processActivityEvent(ctx, e.ObjectID, e.OwnerID)
+		return w.processActivityEvent(ctx, e)
 	default:
 		return nil
 	}
@@ -117,9 +118,17 @@ func (w *Worker) processAthleteEvent(ctx context.Context, e store.Event) error {
 	return nil
 }
 
+// recheckDelay is how long after a create the worker checks the activity
+// again: athletes often mark the race or add #competition shortly after
+// uploading, and Strava sends no webhook for that.
+const recheckDelay = 2 * time.Hour
+
 // processActivityEvent brings one activity in line with Strava, using its
-// owner's token. Events of athletes who are not users are ignored.
-func (w *Worker) processActivityEvent(ctx context.Context, activityID int64, athleteID int64) error {
+// owner's token. Events of athletes who are not users are ignored. After a
+// create is saved, it schedules a recheck recheckDelay later.
+func (w *Worker) processActivityEvent(ctx context.Context, e store.Event) error {
+	activityID := e.ObjectID
+	athleteID := e.OwnerID
 	u, err := w.users.GetByStravaID(ctx, athleteID)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
@@ -151,6 +160,13 @@ func (w *Worker) processActivityEvent(ctx context.Context, activityID int64, ath
 	if err != nil {
 		return fmt.Errorf("save activity %d for athlete %d: %w", activityID, u.StravaID, err)
 	}
+
+	if e.AspectType == "create" {
+		if err := w.events.ScheduleRecheck(ctx, e, w.now().Add(recheckDelay)); err != nil {
+			return fmt.Errorf("schedule recheck for event %d: %w", e.ID, err)
+		}
+	}
+
 	return nil
 }
 

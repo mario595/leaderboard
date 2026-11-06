@@ -145,6 +145,73 @@ func TestProcess_userLookupError(t *testing.T) {
 	testutil.AssertEqual(t, "Activity calls", 0, f.clients.fetchCount())
 }
 
+// A create is checked again two hours later: an athlete often marks the
+// race, or adds #competition, after uploading, and Strava sends no webhook
+// for that.
+func TestProcess_createSchedulesARecheck(t *testing.T) {
+	f := newFixture(t, []fetchResult{found})
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	f.worker.now = func() time.Time { return now }
+	create := activityEvent("create")
+
+	if err := f.worker.process(t.Context(), create); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	rechecks := f.events.rechecks()
+	if len(rechecks) != 1 {
+		t.Fatalf("rechecks scheduled = %d, want 1", len(rechecks))
+	}
+	testutil.AssertEqual(t, "recheck of event", create.ID, rechecks[0].event.ID)
+	testutil.AssertEqual(t, "recheck of activity", create.ObjectID, rechecks[0].event.ObjectID)
+	testutil.AssertTime(t, "recheck at", now.Add(2*time.Hour), rechecks[0].at)
+}
+
+func TestProcess_noRecheck(t *testing.T) {
+	tests := []struct {
+		name    string
+		event   store.Event
+		fetch   fetchResult
+		saveErr error
+	}{
+		{name: "update", event: activityEvent("update"), fetch: found},
+		{name: "delete", event: activityEvent("delete"), fetch: found},
+		// A recheck never schedules another one.
+		{name: "recheck", event: activityEvent("recheck"), fetch: found},
+		{name: "create already deleted on Strava", event: activityEvent("create"), fetch: fetchResult{err: strava.ErrNotFound}},
+		// The event is retried: the recheck comes with the successful attempt.
+		{name: "create whose save fails", event: activityEvent("create"), fetch: found, saveErr: errDB},
+		{
+			name:  "create of a non-user",
+			event: store.Event{ID: 1, ObjectType: "activity", ObjectID: activityID, AspectType: "create", OwnerID: 999},
+			fetch: found,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, []fetchResult{tc.fetch})
+			f.activities.saveErr = tc.saveErr
+
+			_ = f.worker.process(t.Context(), tc.event)
+
+			testutil.AssertEqual(t, "rechecks scheduled", 0, len(f.events.rechecks()))
+		})
+	}
+}
+
+// Failing to schedule fails the event: it is retried, and fetching and
+// saving again is harmless.
+func TestProcess_recheckSchedulingFails(t *testing.T) {
+	f := newFixture(t, []fetchResult{found})
+	f.events.recheckErr = errDB
+
+	err := f.worker.process(t.Context(), activityEvent("create"))
+
+	if !errors.Is(err, errDB) {
+		t.Errorf("process: got error %v, want one wrapping %v", err, errDB)
+	}
+}
+
 var errDB = errors.New("database is locked")
 
 func activityEvent(aspect string) store.Event {
@@ -311,13 +378,36 @@ func (c fakeClient) Activity(ctx context.Context, id int64) (strava.Activity, er
 
 // fakeQueue is an in-memory EventQueue (used from step 3 on).
 type fakeQueue struct {
-	mu      sync.Mutex
-	nextErr error // returned once by NextDue, then cleared
-	pending []store.Event
-	done    []int64
-	retried map[int64]time.Time
-	failed  map[int64]string
-	errMsgs map[int64]string
+	mu         sync.Mutex
+	nextErr    error // returned once by NextDue, then cleared
+	pending    []store.Event
+	done       []int64
+	retried    map[int64]time.Time
+	failed     map[int64]string
+	errMsgs    map[int64]string
+	scheduled  []scheduledRecheck
+	recheckErr error
+}
+
+type scheduledRecheck struct {
+	event store.Event
+	at    time.Time
+}
+
+func (q *fakeQueue) ScheduleRecheck(_ context.Context, e store.Event, at time.Time) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.recheckErr != nil {
+		return q.recheckErr
+	}
+	q.scheduled = append(q.scheduled, scheduledRecheck{event: e, at: at})
+	return nil
+}
+
+func (q *fakeQueue) rechecks() []scheduledRecheck {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]scheduledRecheck(nil), q.scheduled...)
 }
 
 func (q *fakeQueue) NextDue(_ context.Context) (store.Event, bool, error) {
@@ -390,3 +480,9 @@ func (q *fakeQueue) MarkFailed(_ context.Context, id int64, errMsg string) error
 	q.remove(id)
 	return nil
 }
+
+// The real stores satisfy the interfaces.
+var (
+	_ EventQueue = (*store.EventStore)(nil)
+	_ Users      = (*store.UserStore)(nil)
+)

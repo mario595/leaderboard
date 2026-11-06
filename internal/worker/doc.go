@@ -10,6 +10,9 @@
 // day recomputed; if Strava answers not found, it is deleted. Strava's
 // current state wins, which also covers forged or out-of-order events.
 // Athlete events and events of non-users are marked done without action.
+// After a create, the worker queues a "recheck" event for the same activity
+// two hours later: edits to the description or the race flag send no
+// webhook, so this is how points catch up with them.
 //
 // Failures are retried: rate limits at the next Strava window, other errors
 // with backoff up to maxAttempts; a rejected token fails the event at once.
