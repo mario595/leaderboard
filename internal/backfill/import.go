@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/mario595/leaderboard/internal/scoring"
@@ -27,52 +28,66 @@ type ActivitySaver interface {
 // perPage is the largest page Strava's activity list allows.
 const perPage = 200
 
+// Result counts what an import did.
+type Result struct {
+	// Saved is the number of activities saved.
+	Saved int
+	// Details is the number of activities whose detail was fetched.
+	Details int
+}
+
 // Import saves, for the user with the given internal ID, every activity whose
 // local day is between from and to (both inclusive, only the dates count).
-// It returns how many were saved. On error it stops and returns the count so
-// far; errors keep their type (*strava.RateLimitError, strava.ErrUnauthorized),
-// so the caller can decide when to retry. An activity deleted between the
-// list and its detail fetch is skipped.
+// It logs each page and detail fetch at Debug level. On error it stops and
+// returns the counts so far; errors keep their type (*strava.RateLimitError,
+// strava.ErrUnauthorized), so the caller can decide when to retry. An
+// activity deleted between the list and its detail fetch is skipped.
 //
 // A webhook delete can race with an import that listed the activity a moment
 // before, and the import then saves it again. This is rare and accepted: the
 // reconcile job (#31) removes it.
-func Import(ctx context.Context, c Client, saver ActivitySaver, userID int64, from, to time.Time) (int, error) {
+func Import(ctx context.Context, c Client, saver ActivitySaver, logger *slog.Logger, userID int64, from, to time.Time) (Result, error) {
 	after := from.AddDate(0, 0, -1)
 	before := to.AddDate(0, 0, 2)
 	first, last := from.Format(time.DateOnly), to.Format(time.DateOnly)
-	saved := 0
+	var res Result
 	for page := 1; ; page++ {
 		list, err := c.ListActivities(ctx, after, before, page, perPage)
 		if err != nil {
-			return saved, fmt.Errorf("import for user %d, list page %d: %w", userID, page, err)
+			return res, fmt.Errorf("import for user %d, list page %d: %w", userID, page, err)
 		}
+		inRange := 0
 		for _, a := range list {
 			day := a.StartLocal.Format(time.DateOnly)
 			if day < first || day > last {
 				continue
 			}
+			inRange++
 			if isCandidate(a) {
+				logger.Debug("backfill fetch detail", "user_id", userID, "activity_id", a.ID)
+				res.Details++
 				detail, err := c.Activity(ctx, a.ID)
 				if errors.Is(err, strava.ErrNotFound) {
+					logger.Info("backfill activity gone, skipped", "user_id", userID, "activity_id", a.ID)
 					continue
 				}
 				if err != nil {
-					return saved, fmt.Errorf("import for user %d, fetch activity %d: %w", userID, a.ID, err)
+					return res, fmt.Errorf("import for user %d, fetch activity %d: %w", userID, a.ID, err)
 				}
 				a.Description = detail.Description
 			}
 			err = saver.Save(ctx, toStoreActivity(userID, a))
 			if err != nil {
-				return saved, fmt.Errorf("import for user %d, save activity %d: %w", userID, a.ID, err)
+				return res, fmt.Errorf("import for user %d, save activity %d: %w", userID, a.ID, err)
 			}
-			saved++
+			res.Saved++
 		}
+		logger.Debug("backfill page", "user_id", userID, "page", page, "listed", len(list), "in_range", inRange)
 		if len(list) < perPage {
 			break
 		}
 	}
-	return saved, nil
+	return res, nil
 }
 
 // toStoreActivity maps a Strava activity to the stored form for the user with

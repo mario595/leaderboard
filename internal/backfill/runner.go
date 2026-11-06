@@ -69,11 +69,11 @@ func NewRunner(jobs JobQueue, users Users, seasons Seasons, saver ActivitySaver,
 }
 
 // Run processes due jobs until ctx is cancelled, then returns nil. It drains
-// every due job, then waits for a wake, the next poll or cancellation. The job
-// in progress runs with a context that ignores cancellation, so shutdown waits
-// for it instead of leaving it half done: a backfill can take minutes, but it
-// is idempotent, so even a killed process loses nothing. A queue error is
-// logged and retried at the next wake or poll.
+// every due job, then waits for a wake, the next poll or cancellation.
+// Cancellation also stops the job in progress at its next Strava request: a
+// backfill can take half an hour, and since it is idempotent, the job just
+// stays pending and runs again on the next start. A queue error is logged and
+// retried at the next wake or poll.
 func (r *Runner) Run(ctx context.Context) error {
 	for {
 		for {
@@ -88,7 +88,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			if !found {
 				break
 			}
-			r.handle(context.WithoutCancel(ctx), job)
+			r.handle(ctx, job)
 		}
 		select {
 		case <-ctx.Done():
@@ -153,11 +153,16 @@ func (r *Runner) process(ctx context.Context, job store.BackfillJob) error {
 		Expiry:       user.TokenExpiresAt,
 	})
 
-	count, err := Import(ctx, client, r.saver, user.ID, season.StartDate, season.EndDate)
+	r.logger.Info("backfill started", "job_id", job.ID, "user_id", user.ID, "season_id", season.ID,
+		"from", season.StartDate.Format(time.DateOnly), "to", season.EndDate.Format(time.DateOnly),
+		"attempt", job.Attempts+1)
+	start := r.now()
+	res, err := Import(ctx, client, r.saver, r.logger, user.ID, season.StartDate, season.EndDate)
 	if err != nil {
-		return fmt.Errorf("import for user %d and season %d: %w", user.ID, season.ID, err)
+		return fmt.Errorf("import for user %d and season %d (%d saved): %w", user.ID, season.ID, res.Saved, err)
 	}
 
-	r.logger.Info("backfill done", "user_id", user.ID, "season_id", season.ID, "activities", count)
+	r.logger.Info("backfill done", "job_id", job.ID, "user_id", user.ID, "season_id", season.ID,
+		"activities", res.Saved, "details", res.Details, "duration", r.now().Sub(start))
 	return nil
 }

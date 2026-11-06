@@ -278,6 +278,44 @@ func TestRunner_cancelReturnsPromptly(t *testing.T) {
 	}
 }
 
+// A backfill can take half an hour: shutdown stops it at the next request
+// instead of waiting. The job is not marked at all: a shutdown is not a
+// failure, so it stays pending, with its attempts, and runs again on the next
+// start (importing is idempotent).
+func TestRunner_cancelStopsTheImport(t *testing.T) {
+	f := newRunnerFixture(t)
+	f.runner.pollInterval = time.Hour
+	f.client.listing = make(chan struct{}, 1)
+	f.jobs.add(job(1, 2))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- f.runner.Run(ctx) }()
+
+	select {
+	case <-f.client.listing:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the import did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run after cancel: got error %v, want nil", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return within 1s of cancellation: the import ignored it")
+	}
+
+	q := f.jobs
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if marks := len(q.done) + len(q.failed) + len(q.retried); marks != 0 {
+		t.Errorf("interrupted job marked %d times (done %v, failed %v, retried %v), want 0: it must stay pending",
+			marks, q.done, q.failed, q.retried)
+	}
+}
+
 // runnerFixture is a Runner wired to fakes. The fake client serves no
 // activities unless a test sets its pages.
 type runnerFixture struct {

@@ -3,6 +3,7 @@ package backfill
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"testing"
 	"time"
@@ -44,12 +45,13 @@ func TestImport_savesTheSeasonsActivities(t *testing.T) {
 	}
 	saver := &fakeSaver{}
 
-	n, err := Import(t.Context(), client, saver, userID, seasonStart, seasonEnd)
+	res, err := Import(t.Context(), client, saver, discard, userID, seasonStart, seasonEnd)
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
-	testutil.AssertEqual(t, "saved count", 6, n)
+	testutil.AssertEqual(t, "saved count", 6, res.Saved)
+	testutil.AssertEqual(t, "detail count", 2, res.Details)
 	assertIDs(t, "saved IDs", []int64{1, 2, 3, 4, 5, 6}, saver.ids())
 	assertIDs(t, "detail fetches", []int64{1, 5}, client.detailIDs)
 
@@ -72,7 +74,7 @@ func TestImport_savesTheSeasonsActivities(t *testing.T) {
 func TestImport_queryWindow(t *testing.T) {
 	client := &fakeClient{}
 
-	if _, err := Import(t.Context(), client, &fakeSaver{}, userID, seasonStart, seasonEnd); err != nil {
+	if _, err := Import(t.Context(), client, &fakeSaver{}, discard, userID, seasonStart, seasonEnd); err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
@@ -98,12 +100,12 @@ func TestImport_keepsOnlyTheSeasonsDays(t *testing.T) {
 	}}}
 	saver := &fakeSaver{}
 
-	n, err := Import(t.Context(), client, saver, userID, seasonStart, seasonEnd)
+	res, err := Import(t.Context(), client, saver, discard, userID, seasonStart, seasonEnd)
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
-	testutil.AssertEqual(t, "saved count", 2, n)
+	testutil.AssertEqual(t, "saved count", 2, res.Saved)
 	assertIDs(t, "saved IDs", []int64{2, 3}, saver.ids())
 }
 
@@ -113,7 +115,7 @@ func TestImport_noDetailOutsideTheSeason(t *testing.T) {
 		summary(1, "Run", "2026-08-31T19:00:00", time.Hour),
 	}}}
 
-	if _, err := Import(t.Context(), client, &fakeSaver{}, userID, seasonStart, seasonEnd); err != nil {
+	if _, err := Import(t.Context(), client, &fakeSaver{}, discard, userID, seasonStart, seasonEnd); err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
@@ -145,7 +147,7 @@ func TestImport_pages(t *testing.T) {
 			}
 			saver := &fakeSaver{}
 
-			n, err := Import(t.Context(), client, saver, userID, seasonStart, seasonEnd)
+			res, err := Import(t.Context(), client, saver, discard, userID, seasonStart, seasonEnd)
 			if err != nil {
 				t.Fatalf("Import: %v", err)
 			}
@@ -154,7 +156,7 @@ func TestImport_pages(t *testing.T) {
 			for i, l := range client.lists {
 				testutil.AssertEqual(t, "page number", i+1, l.page)
 			}
-			testutil.AssertEqual(t, "saved count", total, n)
+			testutil.AssertEqual(t, "saved count", total, res.Saved)
 			testutil.AssertEqual(t, "saved", total, len(saver.saved))
 		})
 	}
@@ -169,12 +171,12 @@ func TestImport_activityDeletedMeanwhile(t *testing.T) {
 	}}, details: map[int64]strava.Activity{2: summary(2, "Run", "2026-10-02T07:00:00", time.Hour)}}
 	saver := &fakeSaver{}
 
-	n, err := Import(t.Context(), client, saver, userID, seasonStart, seasonEnd)
+	res, err := Import(t.Context(), client, saver, discard, userID, seasonStart, seasonEnd)
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
-	testutil.AssertEqual(t, "saved count", 1, n)
+	testutil.AssertEqual(t, "saved count", 1, res.Saved)
 	assertIDs(t, "saved IDs", []int64{2}, saver.ids())
 }
 
@@ -193,7 +195,7 @@ func TestImport_errorsStopTheImport(t *testing.T) {
 	t.Run("list fails on a later page", func(t *testing.T) {
 		client := &fakeClient{pages: map[int][]strava.Activity{1: full()}, listErr: map[int]error{2: rateLimited}}
 
-		_, err := Import(t.Context(), client, &fakeSaver{}, userID, seasonStart, seasonEnd)
+		_, err := Import(t.Context(), client, &fakeSaver{}, discard, userID, seasonStart, seasonEnd)
 
 		var rl *strava.RateLimitError
 		if !errors.As(err, &rl) {
@@ -207,7 +209,7 @@ func TestImport_errorsStopTheImport(t *testing.T) {
 		}
 		saver := &fakeSaver{}
 
-		_, err := Import(t.Context(), client, saver, userID, seasonStart, seasonEnd)
+		_, err := Import(t.Context(), client, saver, discard, userID, seasonStart, seasonEnd)
 
 		var rl *strava.RateLimitError
 		if !errors.As(err, &rl) {
@@ -223,7 +225,7 @@ func TestImport_errorsStopTheImport(t *testing.T) {
 		}}}
 		saver := &fakeSaver{err: errors.New("database is locked")}
 
-		_, err := Import(t.Context(), client, saver, userID, seasonStart, seasonEnd)
+		_, err := Import(t.Context(), client, saver, discard, userID, seasonStart, seasonEnd)
 
 		if err == nil {
 			t.Fatal("Import with a failing save: got nil error")
@@ -231,6 +233,9 @@ func TestImport_errorsStopTheImport(t *testing.T) {
 		testutil.AssertEqual(t, "save attempts", 1, saver.calls)
 	})
 }
+
+// discard is the logger of tests that do not check logs.
+var discard = slog.New(slog.DiscardHandler)
 
 // summary returns an activity as the list returns it: no description.
 func summary(id int64, sport, startLocal string, moving time.Duration) strava.Activity {
@@ -253,13 +258,22 @@ type fakeClient struct {
 	details   map[int64]strava.Activity
 	listErr   map[int]error // by page
 	detailErr error
+	// listing, when set, makes ListActivities report that it started and then
+	// wait for its context to end, as a request waiting for the rate limiter
+	// does.
+	listing chan struct{}
 
 	lists     []listCall
 	detailIDs []int64
 }
 
-func (f *fakeClient) ListActivities(_ context.Context, after, before time.Time, page, perPage int) ([]strava.Activity, error) {
+func (f *fakeClient) ListActivities(ctx context.Context, after, before time.Time, page, perPage int) ([]strava.Activity, error) {
 	f.lists = append(f.lists, listCall{after: after, before: before, page: page, perPage: perPage})
+	if f.listing != nil {
+		f.listing <- struct{}{}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	if err := f.listErr[page]; err != nil {
 		return nil, err
 	}
