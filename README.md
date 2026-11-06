@@ -18,6 +18,7 @@ Work in progress. What exists today:
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
 - Season backfill: a new member's activities since the season started are imported in the background, and `server backfill` imports a season for every member (`internal/backfill`)
+- Reconciliation: two hours after each new activity the server checks it again, and at startup and every 24 hours it compares each member's last 7 days with Strava, saving what is missing or changed and deleting what is gone (`internal/reconcile`)
 - A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
 - A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
@@ -25,7 +26,7 @@ Work in progress. What exists today:
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: recovering webhook events missed while the server was down, and a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -191,7 +192,9 @@ Create the subscription:
 3. Put the `id` in `.env` as `STRAVA_SUBSCRIPTION_ID` and restart the server.
 4. Edit an activity on Strava: change its title (Strava only sends updates for the title, sport type and privacy). The server stores the event, the worker fetches the activity and saves it with its points, and the event becomes `done`.
 
-`make strava-subscription` shows the current subscription and `make strava-unsubscribe ID=<id>` deletes it. While the server is down, Strava's deliveries fail and, after a few retries, are lost.
+`make strava-subscription` shows the current subscription and `make strava-unsubscribe ID=<id>` deletes it. While the server is down, Strava's deliveries fail and, after a few retries, are lost; the next reconcile (at startup) recovers them.
+
+Strava sends no event when a member edits the description (`#competition`) or changes the workout type to Race. Two hours after each new activity the worker fetches it again, which catches the usual edit made right after the upload; later edits are caught by the daily reconcile of the last 7 days. The reconcile lists each member's activities (one request), fetches the details that can change points, as the backfill does, and logs `reconcile pass`, then `reconcile done` per member with `synced` (activities saved, changed or not) and `deleted`.
 
 ## Development
 
@@ -220,6 +223,7 @@ internal/backfill/     background import of a member's season from Strava
 internal/config/       settings read from the environment
 internal/httpapi/      router, middleware, JSON API handlers
 internal/logging/      structured logger setup
+internal/reconcile/    startup and daily check of recent activities against Strava
 internal/scoring/      the point rules (pure functions)
 internal/spa/          serves the embedded frontend build
 internal/store/        SQLite access, embedded SQL migrations, one store per table

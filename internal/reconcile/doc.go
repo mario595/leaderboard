@@ -8,4 +8,11 @@
 // deletes the stored activities of that window that the import did not save.
 // After a failed import it deletes nothing: a partial list would look like
 // deletions.
+//
+// Scheduler runs User for every member over the last week: once at startup,
+// to recover what was missed while the server was down, then every 24 hours.
+//
+// A webhook create processed between the import's list and the read of the
+// stored IDs makes that new activity look deleted. The window is seconds, and
+// the recheck the worker schedules two hours after each create saves it again.
 package reconcile
