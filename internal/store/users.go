@@ -275,6 +275,36 @@ func (s *UserStore) DeleteByStravaID(ctx context.Context, stravaID int64) (delet
 	return rows > 0, nil
 }
 
+// listUsersQuery selects every user, in the column order of scanUserRow.
+const listUsersQuery = `
+	SELECT id, strava_id, first_name, last_name, access_token, refresh_token, token_expires_at, created_at, updated_at
+	FROM users
+	ORDER BY id;
+`
+
+// List returns every user, ordered by ID. The users include their tokens:
+// callers must never log or encode them.
+func (s *UserStore) List(ctx context.Context) ([]User, error) {
+	var results []User
+	rows, err := s.db.QueryContext(ctx, listUsersQuery)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		u, err := scanUserRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan user for list: %w", err)
+		}
+		results = append(results, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan user for list: %w", err)
+	}
+
+	return results, nil
+}
+
 func scanUserRow(r rowScanner) (User, error) {
 	var user User
 	var expiresAt, createdAt, updatedAt int64

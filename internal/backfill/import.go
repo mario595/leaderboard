@@ -28,12 +28,13 @@ type ActivitySaver interface {
 // perPage is the largest page Strava's activity list allows.
 const perPage = 200
 
-// Result counts what an import did.
+// Result is what an import did.
 type Result struct {
-	// Saved is the number of activities saved.
-	Saved int
 	// Details is the number of activities whose detail was fetched.
 	Details int
+	// IDs are the Strava IDs of the saved activities, in the order they were
+	// saved.
+	IDs []int64
 }
 
 // Import saves, for the user with the given internal ID, every activity whose
@@ -80,7 +81,7 @@ func Import(ctx context.Context, c Client, saver ActivitySaver, logger *slog.Log
 			if err != nil {
 				return res, fmt.Errorf("import for user %d, save activity %d: %w", userID, a.ID, err)
 			}
-			res.Saved++
+			res.IDs = append(res.IDs, a.ID)
 		}
 		logger.Debug("backfill page", "user_id", userID, "page", page, "listed", len(list), "in_range", inRange)
 		if len(list) < perPage {

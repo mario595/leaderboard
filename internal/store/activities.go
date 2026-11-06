@@ -271,6 +271,42 @@ func (s *ActivityStore) ListForUser(ctx context.Context, userID int64, from, to 
 
 }
 
+// idsBetweenQuery selects the Strava IDs of a user's activities whose day is in
+// an inclusive range.
+const idsBetweenQuery = `
+	SELECT strava_id
+	FROM activities
+	WHERE user_id = ? AND day BETWEEN ? AND ?
+	ORDER BY strava_id;
+`
+
+// IDsBetween returns the Strava IDs of the user's activities whose local day is
+// from from to to, both inclusive, in ascending order. Only the dates of from
+// and to count. The reconcile compares them with what Strava returns.
+func (s *ActivityStore) IDsBetween(ctx context.Context, userID int64, from, to time.Time) ([]int64, error) {
+	var result []int64
+	fromDate := from.Format(time.DateOnly)
+	toDate := to.Format(time.DateOnly)
+	rows, err := s.db.QueryContext(ctx, idsBetweenQuery, userID, fromDate, toDate)
+	if err != nil {
+		return nil, fmt.Errorf("activity IDs of user %d from %s to %s: %w", userID, fromDate, toDate, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var stravaID int64
+		err := rows.Scan(&stravaID)
+		if err != nil {
+			return nil, fmt.Errorf("scan activity IDs of user %d from %s to %s: %w", userID, fromDate, toDate, err)
+		}
+		result = append(result, stravaID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan activity IDs of user %d from %s to %s: %w", userID, fromDate, toDate, err)
+	}
+	return result, nil
+}
+
 // scanActivityRow scans one row in the column order of upsertActivityQuery's
 // RETURNING clause and converts the stored formats back: unix seconds to
 // time.Time, seconds to time.Duration, and start_local text to a UTC time.

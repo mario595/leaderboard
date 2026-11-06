@@ -196,6 +196,76 @@ func TestEventStore_markDoneAndFailed(t *testing.T) {
 	}
 }
 
+// A recheck is a copy of the create event, due later: the worker handles it
+// like any activity event.
+func TestEventStore_scheduleRecheck(t *testing.T) {
+	db := newTestDB(t)
+	s := NewEventStore(db)
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	insertTestEvent(t, s, 1, "create")
+	create, found, err := s.NextDue(t.Context())
+	if err != nil || !found {
+		t.Fatalf("NextDue: found=%v err=%v", found, err)
+	}
+	if err := s.MarkDone(t.Context(), create.ID); err != nil {
+		t.Fatalf("MarkDone: %v", err)
+	}
+	at := now.Add(2 * time.Hour)
+
+	if err := s.ScheduleRecheck(t.Context(), create, at); err != nil {
+		t.Fatalf("ScheduleRecheck: %v", err)
+	}
+
+	// Not due before its time.
+	if e, found, err := s.NextDue(t.Context()); err != nil || found {
+		t.Fatalf("NextDue before the recheck time: got event %d (found=%v, err=%v), want nothing", e.ID, found, err)
+	}
+	now = at
+	recheck, found, err := s.NextDue(t.Context())
+	if err != nil || !found {
+		t.Fatalf("NextDue at the recheck time: found=%v err=%v", found, err)
+	}
+	if recheck.ID == create.ID {
+		t.Error("the recheck reused the create's row, want a new event")
+	}
+	testutil.AssertEqual(t, "ObjectType", "activity", recheck.ObjectType)
+	testutil.AssertEqual(t, "ObjectID", create.ObjectID, recheck.ObjectID)
+	testutil.AssertEqual(t, "OwnerID", create.OwnerID, recheck.OwnerID)
+	testutil.AssertEqual(t, "AspectType", "recheck", recheck.AspectType)
+	testutil.AssertTime(t, "EventTime", create.EventTime, recheck.EventTime)
+	// The create's updates are not copied: a recheck has none.
+	testutil.AssertEqual(t, "Updates", "{}", recheck.Updates)
+	testutil.AssertEqual(t, "Status", "pending", recheck.Status)
+	testutil.AssertEqual(t, "Attempts", 0, recheck.Attempts)
+}
+
+// The same create processed twice (a Strava retry, or a worker retry after a
+// failed mark) schedules one recheck: same object and event time.
+func TestEventStore_scheduleRecheckTwice(t *testing.T) {
+	db := newTestDB(t)
+	s := NewEventStore(db)
+	insertTestEvent(t, s, 1, "create")
+	create, _, err := s.NextDue(t.Context())
+	if err != nil {
+		t.Fatalf("NextDue: %v", err)
+	}
+
+	for i := range 2 {
+		at := s.now().Add(time.Duration(2+i) * time.Hour)
+		if err := s.ScheduleRecheck(t.Context(), create, at); err != nil {
+			t.Fatalf("ScheduleRecheck %d: %v", i+1, err)
+		}
+	}
+
+	var n int
+	if err := db.QueryRowContext(t.Context(),
+		"SELECT COUNT(*) FROM webhook_events WHERE aspect_type = 'recheck'").Scan(&n); err != nil {
+		t.Fatalf("count rechecks: %v", err)
+	}
+	testutil.AssertEqual(t, "rechecks", 1, n)
+}
+
 // insertTestEvent stores a pending activity event for objectID and returns
 // its ID.
 func insertTestEvent(t *testing.T, s *EventStore, objectID int64, aspect string) int64 {

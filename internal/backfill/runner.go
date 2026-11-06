@@ -159,10 +159,10 @@ func (r *Runner) process(ctx context.Context, job store.BackfillJob) error {
 	start := r.now()
 	res, err := Import(ctx, client, r.saver, r.logger, user.ID, season.StartDate, season.EndDate)
 	if err != nil {
-		return fmt.Errorf("import for user %d and season %d (%d saved): %w", user.ID, season.ID, res.Saved, err)
+		return fmt.Errorf("import for user %d and season %d (%d saved): %w", user.ID, season.ID, len(res.IDs), err)
 	}
 
 	r.logger.Info("backfill done", "job_id", job.ID, "user_id", user.ID, "season_id", season.ID,
-		"activities", res.Saved, "details", res.Details, "duration", r.now().Sub(start))
+		"activities", len(res.IDs), "details", res.Details, "duration", r.now().Sub(start))
 	return nil
 }

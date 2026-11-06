@@ -550,3 +550,45 @@ func newTestStore(t *testing.T) *UserStore {
 	t.Helper()
 	return NewUserStore(newTestDB(t))
 }
+
+func TestList(t *testing.T) {
+	s := newTestStore(t)
+
+	empty, err := s.List(t.Context())
+	if err != nil {
+		t.Fatalf("List on an empty table: %v", err)
+	}
+	testutil.AssertEqual(t, "users in an empty table", 0, len(empty))
+
+	expiry := time.Date(2026, 10, 15, 18, 0, 0, 0, time.UTC)
+	// Strava IDs out of order: List is ordered by our ID, not theirs.
+	for _, u := range []User{
+		{StravaID: 3, FirstName: "Luke", AccessToken: "luke-access", RefreshToken: "luke-refresh", TokenExpiresAt: expiry},
+		{StravaID: 1, FirstName: "Leia", AccessToken: "leia-access", RefreshToken: "leia-refresh", TokenExpiresAt: expiry},
+		{StravaID: 2, FirstName: "Han", AccessToken: "han-access", RefreshToken: "han-refresh", TokenExpiresAt: expiry},
+	} {
+		if _, err := s.Upsert(t.Context(), u); err != nil {
+			t.Fatalf("upsert %s: %v", u.FirstName, err)
+		}
+	}
+
+	users, err := s.List(t.Context())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	if len(users) != 3 {
+		t.Fatalf("List returned %d users, want 3", len(users))
+	}
+	for i, want := range []string{"Luke", "Leia", "Han"} {
+		testutil.AssertEqual(t, "user in ID order", want, users[i].FirstName)
+		if i > 0 && users[i].ID <= users[i-1].ID {
+			t.Errorf("users not in ID order: %d after %d", users[i].ID, users[i-1].ID)
+		}
+	}
+	// Full users: the reconcile needs the tokens.
+	testutil.AssertEqual(t, "StravaID", int64(3), users[0].StravaID)
+	testutil.AssertEqual(t, "AccessToken", "luke-access", users[0].AccessToken)
+	testutil.AssertEqual(t, "RefreshToken", "luke-refresh", users[0].RefreshToken)
+	testutil.AssertTime(t, "TokenExpiresAt", expiry, users[0].TokenExpiresAt)
+}
