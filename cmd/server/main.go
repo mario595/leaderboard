@@ -15,6 +15,7 @@ import (
 
 	"github.com/mario595/leaderboard/internal/activity"
 	"github.com/mario595/leaderboard/internal/auth"
+	"github.com/mario595/leaderboard/internal/backfill"
 	"github.com/mario595/leaderboard/internal/config"
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
@@ -25,6 +26,7 @@ import (
 	"github.com/mario595/leaderboard/internal/worker"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -50,10 +52,31 @@ func main() {
 			fmt.Fprintf(os.Stderr, "invite failed: %v\n", err)
 			os.Exit(1)
 		}
+
+	case "backfill":
+		if err := runBackfill(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "backfill failed: %v\n", err)
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season or serve")
+		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season, backfill or serve")
 		os.Exit(2)
 	}
+}
+
+func runBackfill(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	_, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	seasons := store.NewSeasonStore(db)
+	jobs := store.NewBackfillStore(db)
+	return backfillCommand(ctx, seasons, jobs, args, os.Stdout)
 }
 
 func runInvite(args []string) error {
@@ -124,11 +147,20 @@ func runServer() error {
 	secureCookies := cfg.Env == "prod"
 	sessions, stopSessions := auth.NewSessionManager(db, secureCookies)
 	defer stopSessions()
-	authHandler := auth.New(oauthCfg, userStore, sessions, logger, httpClient, secureCookies)
+	// One request every 6s, bursts of 5: at most 150 per 15 minutes, under
+	// Strava's 200, leaving room for logins. Shared by every Strava client.
+	limiter := rate.NewLimiter(rate.Every(6*time.Second), 5)
+	api := strava.New(oauthCfg, httpClient, userStore, strava.DefaultBaseURL, limiter)
+	backfillClient := func(userID int64, tok *oauth2.Token) backfill.Client {
+		return api.ForUser(userID, tok)
+	}
+	seasonStore := store.NewSeasonStore(db)
+	runner := backfill.NewRunner(store.NewBackfillStore(db), userStore, seasonStore, activityService, backfillClient, logger)
+
+	authHandler := auth.New(oauthCfg, userStore, runner, sessions, logger, httpClient, secureCookies)
 	wake := make(chan struct{}, 1)
 
 	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, wake, logger)
-	api := strava.New(oauthCfg, httpClient, userStore, strava.DefaultBaseURL)
 	newClient := func(userID int64, tok *oauth2.Token) worker.ActivityFetcher {
 		return api.ForUser(userID, tok)
 	}
@@ -142,10 +174,17 @@ func runServer() error {
 		}
 	})
 	logger.Info("worker started")
+
+	wg.Go(func() {
+		if err := runner.Run(workerCtx); err != nil {
+			logger.Error("backfill runner stopped", "error", err)
+		}
+	})
+	logger.Info("backfill runner started")
 	defer func() {
 		cancelWorker()
 		wg.Wait()
-		logger.Info("worker stopped")
+		logger.Info("background jobs stopped")
 	}()
 
 	activityStore := store.NewActivityStore(db)
@@ -156,7 +195,7 @@ func runServer() error {
 			Sessions:   sessions,
 			Users:      userStore,
 			Webhook:    wh,
-			Seasons:    store.NewSeasonStore(db),
+			Seasons:    seasonStore,
 			Standings:  activityStore,
 			Activities: activityStore,
 			SPA:        spa.Handler(),
@@ -185,6 +224,7 @@ func runServer() error {
 	case <-ctx.Done():
 		logger.Info("shutdown signal received")
 	}
+	stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -3,6 +3,8 @@ package strava
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -74,4 +76,32 @@ func (c *Client) Activity(ctx context.Context, id int64) (Activity, error) {
 		return Activity{}, fmt.Errorf("fetch activity %d: %w", id, err)
 	}
 	return activity, nil
+}
+
+// ListActivities returns one page (numbered from 1) of the user's activities
+// that started after after and before before. Strava compares both with the
+// UTC start time, not the local one, so a caller filtering by local day must
+// pad the range. A page past the last one is empty. The activities are
+// summaries: Description is always "". Errors are typed as in Activity.
+func (c *Client) ListActivities(ctx context.Context, after, before time.Time, page, perPage int) ([]Activity, error) {
+	var dtos []activityDTO
+	q := url.Values{
+		"after":    {strconv.FormatInt(after.Unix(), 10)},
+		"before":   {strconv.FormatInt(before.Unix(), 10)},
+		"page":     {strconv.Itoa(page)},
+		"per_page": {strconv.Itoa(perPage)},
+	}
+	if err := c.get(ctx, "/athlete/activities?"+q.Encode(), &dtos); err != nil {
+		return nil, fmt.Errorf("list activities page %d: %w", page, err)
+	}
+
+	result := make([]Activity, 0, len(dtos))
+	for _, dto := range dtos {
+		a, err := dto.toActivity()
+		if err != nil {
+			return nil, fmt.Errorf("parsing activity dto %d: %w", dto.ID, err)
+		}
+		result = append(result, a)
+	}
+	return result, nil
 }

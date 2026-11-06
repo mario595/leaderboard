@@ -30,39 +30,6 @@ func TestBackoff(t *testing.T) {
 	}
 }
 
-func TestNextWindow(t *testing.T) {
-	at := func(day, hour, minute, second int) time.Time {
-		return time.Date(2026, 10, day, hour, minute, second, 0, time.UTC)
-	}
-	shortOnly := &strava.RateLimitError{ShortUsage: 201, ShortLimit: 200, DailyUsage: 900, DailyLimit: 2000}
-	daily := &strava.RateLimitError{ShortUsage: 50, ShortLimit: 200, DailyUsage: 2000, DailyLimit: 2000}
-	unknown := &strava.RateLimitError{} // headers missing or unparseable
-
-	testCases := []struct {
-		name string
-		now  time.Time
-		rl   *strava.RateLimitError
-		want time.Time
-	}{
-		{name: "mid window", now: at(15, 12, 7, 30), rl: shortOnly, want: at(15, 12, 15, 0)},
-		// Exactly on a boundary, the window just started: wait for the next one.
-		{name: "on a boundary", now: at(15, 12, 15, 0), rl: shortOnly, want: at(15, 12, 30, 0)},
-		{name: "last window of the hour", now: at(15, 12, 59, 59), rl: shortOnly, want: at(15, 13, 0, 0)},
-		{name: "last window of the day", now: at(15, 23, 58, 0), rl: shortOnly, want: at(16, 0, 0, 0)},
-		{name: "daily quota used up", now: at(15, 12, 7, 30), rl: daily, want: at(16, 0, 0, 0)},
-		// Zero limits mean "unknown", not "daily quota of 0 used up".
-		{name: "unknown limits", now: at(15, 12, 7, 30), rl: unknown, want: at(15, 12, 15, 0)},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := nextWindow(tc.now, tc.rl)
-			if !got.Equal(tc.want) {
-				t.Errorf("nextWindow(%v): got %v, wanted %v", tc.now, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestHandle(t *testing.T) {
 	now := time.Date(2026, 10, 15, 12, 7, 30, 0, time.UTC)
 	ride := strava.Activity{ID: activityID, SportType: "Ride", StartLocal: now, MovingTime: time.Hour}

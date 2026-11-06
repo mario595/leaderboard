@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 
@@ -100,6 +101,44 @@ func TestErrors_rateLimited(t *testing.T) {
 			}
 			if *rateErr != tc.want {
 				t.Errorf("RateLimitError: got %+v, wanted %+v", *rateErr, tc.want)
+			}
+		})
+	}
+}
+
+// RetryAt was the worker's nextWindow (#14): moved here so the backfill
+// runner shares it.
+func TestRateLimitError_retryAt(t *testing.T) {
+	at := func(day, hour, minute, second int) time.Time {
+		return time.Date(2026, 10, day, hour, minute, second, 0, time.UTC)
+	}
+	shortOnly := &RateLimitError{ShortUsage: 201, ShortLimit: 200, DailyUsage: 900, DailyLimit: 2000}
+	daily := &RateLimitError{ShortUsage: 50, ShortLimit: 200, DailyUsage: 2000, DailyLimit: 2000}
+	unknown := &RateLimitError{} // headers missing or unparseable
+
+	testCases := []struct {
+		name string
+		now  time.Time
+		rl   *RateLimitError
+		want time.Time
+	}{
+		{name: "mid window", now: at(15, 12, 7, 30), rl: shortOnly, want: at(15, 12, 15, 0)},
+		// Exactly on a boundary, the window just started: wait for the next one.
+		{name: "on a boundary", now: at(15, 12, 15, 0), rl: shortOnly, want: at(15, 12, 30, 0)},
+		{name: "last window of the hour", now: at(15, 12, 59, 59), rl: shortOnly, want: at(15, 13, 0, 0)},
+		{name: "last window of the day", now: at(15, 23, 58, 0), rl: shortOnly, want: at(16, 0, 0, 0)},
+		{name: "daily quota used up", now: at(15, 12, 7, 30), rl: daily, want: at(16, 0, 0, 0)},
+		// Zero limits mean "unknown", not "daily quota of 0 used up".
+		{name: "unknown limits", now: at(15, 12, 7, 30), rl: unknown, want: at(15, 12, 15, 0)},
+		// Midnight is UTC midnight, whatever the zone of now: 23:00 UTC is
+		// already the 16th in India, but the quota resets at 00:00 UTC.
+		{name: "non-UTC now", now: at(15, 23, 0, 0).In(time.FixedZone("IST", 5*3600+1800)), rl: daily, want: at(16, 0, 0, 0)},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.rl.RetryAt(tc.now)
+			if !got.Equal(tc.want) {
+				t.Errorf("RetryAt(%v): got %v, wanted %v", tc.now, got, tc.want)
 			}
 		})
 	}

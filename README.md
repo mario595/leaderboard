@@ -12,11 +12,12 @@ Work in progress. What exists today:
 - Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
 - A season model (a named range of dates) with a CLI to create and list seasons
 - The scoring rules below, as a tested Go package (`internal/scoring`)
-- Activity storage with points recomputed per user and day on every save or delete (`internal/activity`); not fed by Strava yet
-- A Strava API client that refreshes expired access tokens and saves the new ones, and fetches an activity with errors for not found, revoked access and rate limits (`internal/strava`); not called by the app yet
+- Activity storage with points recomputed per user and day on every save or delete (`internal/activity`)
+- A Strava API client that refreshes expired access tokens and saves the new ones, fetches an activity or a page of a member's activities, with errors for not found, revoked access and rate limits, and paces every request through one app-wide rate limiter (`internal/strava`)
 - A Strava webhook endpoint that verifies the subscription and stores incoming events (`internal/webhook`)
 - A background worker that turns those events into scored activities: it fetches each activity from Strava and saves or deletes it, with retries (`internal/worker`)
 - Deauthorization: when a member revokes the app on Strava, everything stored about them is deleted
+- Season backfill: a new member's activities since the season started are imported in the background, and `server backfill` imports a season for every member (`internal/backfill`)
 - A leaderboard API: the ranking of all members by points for the current or a chosen season (`GET /api/leaderboard`)
 - A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
@@ -24,7 +25,7 @@ Work in progress. What exists today:
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
 
-Not built yet: loading activities from before signing up, and a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+Not built yet: recovering webhook events missed while the server was down, and a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -154,6 +155,20 @@ go run ./cmd/server invite revoke -code <code>
 
 `create` prints the link to share, `BASE_URL/invite/<code>`: load `.env` first (`set -a; . ./.env; set +a`) so the link points at the right host. `-uses` is how many people can sign up with it (required); `-expires` is how long it stays valid (`168h` is a week; default: never). `list` shows each code with its uses, expiry and whether it was revoked. A new athlete who signs in without a usable invitation (none, unknown, used up, revoked or expired) gets no account and is sent back to the login page with an explanation. Each member records the invitation they signed up with.
 
+## Backfill
+
+A member who signs up during a season starts with their real total: the server imports their Strava activities since the season started, in the background, while they already use the app. Their page fills in as the import goes.
+
+To import a season for every member (a season created after people joined, or to redo a failed import), with the server running:
+
+```
+go run ./cmd/server backfill -season <id>
+```
+
+It only queues one job per member; the running server picks them up within a minute. Running it twice is harmless: a job that is still waiting is not queued again, and importing the same activities again changes nothing.
+
+How it works: the app lists the member's activities for the season's dates (one request per 200 activities) and fetches the full activity only when its `#competition` tag could add points (a counted sport, 30 minutes or more, and not already a race), since the list has no descriptions. Every Strava request of the app, webhooks included, goes through one rate limiter: one request every 6 seconds, in bursts of up to 5, which keeps the app under Strava's limit of 200 requests per 15 minutes. A season with an activity a day takes a few minutes per month. If Strava still answers "rate limited", the job waits for the next 15-minute window. Stopping the server stops an import at its next request; it starts over on the next start. Progress is logged: `backfill started` and `backfill done` (with counts and duration) at the default level, each page and fetch with `LOG_LEVEL=debug`.
+
 ## Strava webhooks
 
 Strava notifies the app when a member creates, edits or deletes an activity, by calling a public URL: one subscription per Strava application. The server only stores each event and answers; processing happens in the background.
@@ -198,9 +213,10 @@ CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s f
 ### Project layout
 
 ```
-cmd/server/            entry point: web server and the `season` and `invite` subcommands
+cmd/server/            entry point: web server and the `season`, `invite` and `backfill` subcommands
 internal/activity/     saving and deleting activities, with the per-day point recompute
 internal/auth/         Strava OAuth login and callback, invitation links, logout
+internal/backfill/     background import of a member's season from Strava
 internal/config/       settings read from the environment
 internal/httpapi/      router, middleware, JSON API handlers
 internal/logging/      structured logger setup
@@ -224,7 +240,8 @@ For each member the app stores:
 
 - the Strava profile basics (athlete ID, first and last name), the OAuth tokens that let it read activities, and which invitation they signed up with;
 - for each counted activity: sport type, local start time, moving time, distance, workout type, description (only to find the `#competition` tag) and the points awarded;
-- the webhook events Strava sends about them, until processed.
+- the webhook events Strava sends about them, until processed;
+- the backfill jobs that import their seasons.
 
 Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all of it: Strava sends a deauthorization event, and the app removes the member, their activities and their events in one transaction. Any open session of that member stops working on its next request. Signing in again starts from scratch.
 

@@ -26,6 +26,7 @@ func TestMigrate(t *testing.T) {
 	assertTableExists(t, db, "activities")
 	assertTableExists(t, db, "webhook_events")
 	assertTableExists(t, db, "invitations")
+	assertTableExists(t, db, "backfill_jobs")
 
 	// Run a second time. Should not fail (idempotency).
 	if err := Migrate(t.Context(), db); err != nil {

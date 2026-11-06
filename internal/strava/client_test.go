@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/time/rate"
 
 	"github.com/mario595/leaderboard/internal/store"
 	"github.com/mario595/leaderboard/internal/testutil"
@@ -124,6 +126,63 @@ func TestGet_refreshUsesBaseTimeout(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Errorf("get with a slow refresh took %v, wanted about the 100ms timeout", elapsed)
+	}
+}
+
+// One limiter for the whole API: requests of different users share it, and a
+// request that cannot get a turn before its context ends is never sent.
+func TestGet_limiterIsSharedByAllClients(t *testing.T) {
+	fake := newFakeStrava(t)
+	// Two requests at once, then one per hour: the third must wait.
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 2)
+	api := newTestAPIWithLimiter(fake, &fakeTokenStore{}, 5*time.Second, limiter)
+	alice := api.ForUser(7, validToken())
+	bob := api.ForUser(8, validToken())
+
+	var athlete struct{}
+	if err := alice.get(t.Context(), "/athlete", &athlete); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	if err := bob.get(t.Context(), "/athlete", &athlete); err != nil {
+		t.Fatalf("second request (within the burst): %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := alice.get(ctx, "/athlete", &athlete)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("third request: got nil error, want it held back by the limiter")
+	}
+	testutil.AssertEqual(t, "requests that reached Strava", 2, fake.apiCount())
+	// Wait gives up at once when the context ends before the next turn; it
+	// does not sleep until the deadline.
+	if elapsed > time.Second {
+		t.Errorf("third request took %v, want it to give up within the context's 100ms", elapsed)
+	}
+}
+
+// A request that gets a turn goes through: the limiter delays, it does not drop.
+func TestGet_limiterDelaysUntilTheNextTurn(t *testing.T) {
+	fake := newFakeStrava(t)
+	limiter := rate.NewLimiter(rate.Every(200*time.Millisecond), 1)
+	client := newTestAPIWithLimiter(fake, &fakeTokenStore{}, 5*time.Second, limiter).ForUser(7, validToken())
+
+	var athlete struct{}
+	start := time.Now()
+	for i := range 3 {
+		if err := client.get(t.Context(), "/athlete", &athlete); err != nil {
+			t.Fatalf("request %d: %v", i+1, err)
+		}
+	}
+	elapsed := time.Since(start)
+
+	testutil.AssertEqual(t, "requests that reached Strava", 3, fake.apiCount())
+	// The first is free, the next two wait 200ms each.
+	if elapsed < 350*time.Millisecond {
+		t.Errorf("3 requests at one per 200ms took %v, want at least ~400ms", elapsed)
 	}
 }
 
@@ -274,6 +333,11 @@ func newTestAPIWithTimeout(fake *fakeStrava, timeout time.Duration) *API {
 }
 
 func newTestAPIWith(fake *fakeStrava, tokens TokenStore, timeout time.Duration) *API {
+	return newTestAPIWithLimiter(fake, tokens, timeout, nil)
+}
+
+// newTestAPIWithLimiter is newTestAPIWith plus a rate limiter (nil: none).
+func newTestAPIWithLimiter(fake *fakeStrava, tokens TokenStore, timeout time.Duration, limiter *rate.Limiter) *API {
 	cfg := &oauth2.Config{
 		ClientID:     "client-id",
 		ClientSecret: "client-secret",
@@ -282,7 +346,7 @@ func newTestAPIWith(fake *fakeStrava, tokens TokenStore, timeout time.Duration) 
 			AuthStyle: oauth2.AuthStyleInParams, // as Strava requires
 		},
 	}
-	return New(cfg, &http.Client{Timeout: timeout}, tokens, fake.srv.URL)
+	return New(cfg, &http.Client{Timeout: timeout}, tokens, fake.srv.URL, limiter)
 }
 
 func validToken() *oauth2.Token {
@@ -317,6 +381,8 @@ type fakeStrava struct {
 	apiCalls     int
 	apiAuth      string
 	apiPath      string
+	listBody     string     // set by tests: replaces the first page of activities
+	listQuery    url.Values // the query of the last activity list request
 }
 
 func newFakeStrava(t *testing.T) *fakeStrava {
@@ -404,6 +470,42 @@ func newFakeStrava(t *testing.T) *fakeStrava {
 		_, _ = w.Write(data)
 	})
 
+	// The athlete's activity list: one page from a fixture (or listBody),
+	// then empty pages.
+	mux.HandleFunc("GET /athlete/activities", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.apiCalls++
+		f.apiAuth = r.Header.Get("Authorization")
+		f.apiPath = r.URL.Path
+		f.listQuery = r.URL.Query()
+		status, delay, usage, body := f.apiStatus, f.delay, f.rateUsage, f.listBody
+		f.mu.Unlock()
+		time.Sleep(delay)
+
+		w.Header().Set("X-RateLimit-Limit", "200,2000")
+		w.Header().Set("X-RateLimit-Usage", usage)
+
+		if status != http.StatusOK {
+			http.Error(w, `{"message":"error"}`, status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") != "1" {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		if body != "" {
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		data, err := os.ReadFile("testdata/activities_page.json")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(data)
+	})
+
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
@@ -437,6 +539,12 @@ func (f *fakeStrava) apiCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.apiCalls
+}
+
+func (f *fakeStrava) lastListQuery() url.Values {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.listQuery
 }
 
 func (f *fakeStrava) lastAPIAuth() string {

@@ -70,9 +70,14 @@ func (f *fakeUserStore) SignUp(_ context.Context, u store.User, code string) (st
 }
 
 func newHandlerWith(fs *fakeStrava, users UserStore) *Handler {
+	return newHandlerWithListener(fs, users, nil)
+}
+
+// newHandlerWithListener is newHandlerWith plus a sign-up listener (nil: none).
+func newHandlerWithListener(fs *fakeStrava, users UserStore, signUps SignUpListener) *Handler {
 	cfg := NewOauthConfig("test-id", "test-secret", "http://localhost:8080")
 	cfg.Endpoint.TokenURL = fs.server.URL + "/oauth/token"
-	return New(cfg, users, scs.New(), slog.New(slog.DiscardHandler), fs.server.Client(), false)
+	return New(cfg, users, signUps, scs.New(), slog.New(slog.DiscardHandler), fs.server.Client(), false)
 }
 
 const validTokenJSON = `{"token_type":"Bearer","access_token":"AT","refresh_token":"RT",
