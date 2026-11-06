@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/mario595/leaderboard/internal/scoring"
 	"github.com/mario595/leaderboard/internal/store"
@@ -31,6 +32,12 @@ func NewService(db *sql.DB) *Service {
 		db:         db,
 		activities: store.NewActivityStore(db),
 	}
+}
+
+// IDsBetween returns the Strava IDs of the user's activities whose local day is
+// between from and to, both inclusive. See store.ActivityStore.IDsBetween.
+func (s *Service) IDsBetween(ctx context.Context, userID int64, from, to time.Time) ([]int64, error) {
+	return s.activities.IDsBetween(ctx, userID, from, to)
 }
 
 // Save stores a new activity or updates an existing one,
