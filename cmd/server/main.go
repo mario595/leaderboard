@@ -146,6 +146,7 @@ func runServer() error {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	secureCookies := cfg.Env == "prod"
 	sessions, stopSessions := auth.NewSessionManager(db, secureCookies)
+	defer stopSessions()
 	// One request every 6s, bursts of 5: at most 150 per 15 minutes, under
 	// Strava's 200, leaving room for logins. Shared by every Strava client.
 	limiter := rate.NewLimiter(rate.Every(6*time.Second), 5)
@@ -156,16 +157,13 @@ func runServer() error {
 	seasonStore := store.NewSeasonStore(db)
 	runner := backfill.NewRunner(store.NewBackfillStore(db), userStore, seasonStore, activityService, backfillClient, logger)
 
-	defer stopSessions()
 	authHandler := auth.New(oauthCfg, userStore, runner, sessions, logger, httpClient, secureCookies)
 	wake := make(chan struct{}, 1)
 
 	wh := webhook.New(eventStore, cfg.StravaVerifyToken, cfg.StravaSubscriptionID, wake, logger)
-
 	newClient := func(userID int64, tok *oauth2.Token) worker.ActivityFetcher {
 		return api.ForUser(userID, tok)
 	}
-
 	eventWorker := worker.New(eventStore, userStore, activityService, newClient, wake, logger)
 
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
@@ -176,11 +174,6 @@ func runServer() error {
 		}
 	})
 	logger.Info("worker started")
-	defer func() {
-		cancelWorker()
-		wg.Wait()
-		logger.Info("worker stopped")
-	}()
 
 	wg.Go(func() {
 		if err := runner.Run(workerCtx); err != nil {
@@ -191,11 +184,10 @@ func runServer() error {
 	defer func() {
 		cancelWorker()
 		wg.Wait()
-		logger.Info("backfill runner stopped")
+		logger.Info("background jobs stopped")
 	}()
 
 	activityStore := store.NewActivityStore(db)
-
 	router := httpapi.NewRouter(
 		httpapi.Deps{
 			Logger:     logger,
