@@ -387,6 +387,36 @@ func TestActivityStore_listForUserEmpty(t *testing.T) {
 	}
 }
 
+func TestActivityStore_idsBetween(t *testing.T) {
+	s, db, userID := newTestActivityStore(t)
+	other := createTestUser(t, db, 43)
+	upsertTestActivity(t, s, 1, userID, "2026-09-30T23:59") // the day before
+	upsertTestActivity(t, s, 2, userID, "2026-10-01T00:00") // first day
+	upsertTestActivity(t, s, 3, userID, "2026-10-04T12:00")
+	upsertTestActivity(t, s, 4, userID, "2026-10-07T23:59") // last day
+	upsertTestActivity(t, s, 5, userID, "2026-10-08T00:00") // the day after
+	upsertTestActivity(t, s, 6, other, "2026-10-04T12:00")  // another user
+
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+	ids, err := s.IDsBetween(t.Context(), userID, from, to)
+	if err != nil {
+		t.Fatalf("IDsBetween: %v", err)
+	}
+
+	slices.Sort(ids)
+	if !slices.Equal([]int64{2, 3, 4}, ids) {
+		t.Errorf("IDsBetween = %v, want [2 3 4]", ids)
+	}
+
+	// Nothing in range: empty, no error.
+	none, err := s.IDsBetween(t.Context(), userID, from.AddDate(1, 0, 0), to.AddDate(1, 0, 0))
+	if err != nil {
+		t.Fatalf("IDsBetween with nothing in range: %v", err)
+	}
+	testutil.AssertEqual(t, "IDs in an empty range", 0, len(none))
+}
+
 func activityIDs(as []Activity) []int64 {
 	ids := make([]int64, len(as))
 	for i, a := range as {
