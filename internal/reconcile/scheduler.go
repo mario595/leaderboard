@@ -95,6 +95,6 @@ func (s *Scheduler) pass(ctx context.Context) {
 			s.logger.Error("reconcile failed", "user_id", u.ID, "from", first, "to", last, "error", err)
 			continue
 		}
-		s.logger.Info("reconcile done", "user_id", u.ID, "from", first, "to", last, "saved", res.Saved, "deleted", res.Deleted)
+		s.logger.Info("reconcile done", "user_id", u.ID, "from", first, "to", last, "synced", res.Saved, "deleted", res.Deleted)
 	}
 }

@@ -62,7 +62,7 @@ func TestScheduler_passGoesOnAfterAnError(t *testing.T) {
 	assertLogged(t, f.logs, "level=ERROR", "user_id=1", "rate limit")
 	// Only the error: no result line as if member 1 had been reconciled.
 	assertNotLogged(t, f.logs, "level=INFO", "user_id=1")
-	assertLogged(t, f.logs, "level=INFO", "user_id=2", "saved=1")
+	assertLogged(t, f.logs, "level=INFO", "user_id=2", "synced=1")
 }
 
 func TestScheduler_passListFails(t *testing.T) {

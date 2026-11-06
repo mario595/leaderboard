@@ -19,6 +19,7 @@ import (
 	"github.com/mario595/leaderboard/internal/config"
 	"github.com/mario595/leaderboard/internal/httpapi"
 	"github.com/mario595/leaderboard/internal/logging"
+	"github.com/mario595/leaderboard/internal/reconcile"
 	"github.com/mario595/leaderboard/internal/spa"
 	"github.com/mario595/leaderboard/internal/store"
 	"github.com/mario595/leaderboard/internal/strava"
@@ -156,7 +157,7 @@ func runServer() error {
 	}
 	seasonStore := store.NewSeasonStore(db)
 	runner := backfill.NewRunner(store.NewBackfillStore(db), userStore, seasonStore, activityService, backfillClient, logger)
-
+	reconciler := reconcile.NewScheduler(userStore, activityService, backfillClient, logger)
 	authHandler := auth.New(oauthCfg, userStore, runner, sessions, logger, httpClient, secureCookies)
 	wake := make(chan struct{}, 1)
 
@@ -181,6 +182,13 @@ func runServer() error {
 		}
 	})
 	logger.Info("backfill runner started")
+	wg.Go(func() {
+		if err := reconciler.Run(workerCtx); err != nil {
+			logger.Error("reconcile scheduler stopped", "error", err)
+		}
+	})
+	logger.Info("reconcile scheduler started")
+
 	defer func() {
 		cancelWorker()
 		wg.Wait()
