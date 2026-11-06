@@ -50,7 +50,7 @@ func TestImport_savesTheSeasonsActivities(t *testing.T) {
 		t.Fatalf("Import: %v", err)
 	}
 
-	testutil.AssertEqual(t, "saved count", 6, res.Saved)
+	assertIDs(t, "result IDs", []int64{1, 2, 3, 4, 5, 6}, res.IDs)
 	testutil.AssertEqual(t, "detail count", 2, res.Details)
 	assertIDs(t, "saved IDs", []int64{1, 2, 3, 4, 5, 6}, saver.ids())
 	assertIDs(t, "detail fetches", []int64{1, 5}, client.detailIDs)
@@ -105,7 +105,7 @@ func TestImport_keepsOnlyTheSeasonsDays(t *testing.T) {
 		t.Fatalf("Import: %v", err)
 	}
 
-	testutil.AssertEqual(t, "saved count", 2, res.Saved)
+	assertIDs(t, "result IDs", []int64{2, 3}, res.IDs)
 	assertIDs(t, "saved IDs", []int64{2, 3}, saver.ids())
 }
 
@@ -156,7 +156,7 @@ func TestImport_pages(t *testing.T) {
 			for i, l := range client.lists {
 				testutil.AssertEqual(t, "page number", i+1, l.page)
 			}
-			testutil.AssertEqual(t, "saved count", total, res.Saved)
+			testutil.AssertEqual(t, "result IDs", total, len(res.IDs))
 			testutil.AssertEqual(t, "saved", total, len(saver.saved))
 		})
 	}
@@ -176,7 +176,8 @@ func TestImport_activityDeletedMeanwhile(t *testing.T) {
 		t.Fatalf("Import: %v", err)
 	}
 
-	testutil.AssertEqual(t, "saved count", 1, res.Saved)
+	// Not in the result: the reconcile deletes what the import did not save.
+	assertIDs(t, "result IDs", []int64{2}, res.IDs)
 	assertIDs(t, "saved IDs", []int64{2}, saver.ids())
 }
 
@@ -195,12 +196,14 @@ func TestImport_errorsStopTheImport(t *testing.T) {
 	t.Run("list fails on a later page", func(t *testing.T) {
 		client := &fakeClient{pages: map[int][]strava.Activity{1: full()}, listErr: map[int]error{2: rateLimited}}
 
-		_, err := Import(t.Context(), client, &fakeSaver{}, discard, userID, seasonStart, seasonEnd)
+		res, err := Import(t.Context(), client, &fakeSaver{}, discard, userID, seasonStart, seasonEnd)
 
 		var rl *strava.RateLimitError
 		if !errors.As(err, &rl) {
 			t.Errorf("Import: error %v, want a *strava.RateLimitError", err)
 		}
+		// What was saved before the error, for the log.
+		testutil.AssertEqual(t, "result IDs", 200, len(res.IDs))
 	})
 	t.Run("detail fails", func(t *testing.T) {
 		client := &fakeClient{
