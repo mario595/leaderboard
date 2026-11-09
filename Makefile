@@ -1,4 +1,4 @@
-.PHONY: run build test vet lint web-install web-dev web-test web-check web-build strava-subscription strava-subscribe strava-unsubscribe
+.PHONY: run build test vet lint web-install web-dev web-test web-check web-build strava-subscription strava-subscribe strava-unsubscribe docker-build docker-run
 
 # Exports the variables from .env (if present) into the recipe's shell.
 # Make runs each recipe line in its own shell, so use it on the same line.
@@ -65,3 +65,15 @@ strava-unsubscribe:
 	@test -n "$(ID)" || { echo "usage: make strava-unsubscribe ID=<subscription id>"; exit 2; }
 	@$(LOAD_ENV); curl -sS -X DELETE "$(STRAVA_SUBSCRIPTIONS)/$(ID)" -w "HTTP %{http_code}\n" \
 		-F client_id="$$STRAVA_CLIENT_ID" -F client_secret="$$STRAVA_CLIENT_SECRET"
+
+# Docker image: the frontend and a static binary on distroless (see Dockerfile).
+docker-build:
+	docker build -t leaderboard .
+
+# Runs the image with the settings from .env. Docker reads .env literally: no
+# quotes, no "export". BASE_URL is overridden because .env points to the Vite
+# dev server (:5173). The database lives in the leaderboard-data volume, which
+# outlives the container.
+docker-run:
+	docker run --rm --name leaderboard -p 8080:8080 --env-file .env \
+		-e BASE_URL=http://localhost:8080 -v leaderboard-data:/data leaderboard

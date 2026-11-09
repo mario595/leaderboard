@@ -25,6 +25,7 @@ Work in progress. What exists today:
 - SQLite storage with versioned migrations
 - A health endpoint, structured logging and graceful shutdown
 - CI (format, vet, tests, lint)
+- A Docker image of about 6 MB to download: the frontend and a static binary on a distroless base, with the database on a volume
 
 Not built yet: a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
@@ -44,6 +45,7 @@ The rules, implemented in `internal/scoring`:
 - [golangci-lint](https://golangci-lint.run/welcome/install/) v2, only for `make lint`
 - [Node.js](https://nodejs.org/) (the major version in `web/.nvmrc`), only for the frontend
 - A Strava account and a Strava API application (see below)
+- [Docker](https://docs.docker.com/engine/install/), only to build and run the image
 
 No C compiler is needed: the SQLite driver is pure Go. (`go test -race` does need one.)
 
@@ -114,6 +116,25 @@ make build
 ```
 
 Open <http://localhost:8080>. Any path that is not a file, the API, the webhook or the health check gets the app's `index.html`, so reloading `/activities` works. A missing file (`/assets/old.js`) is a 404. Files under `/assets/` have a content hash in their names and are cached for a year; `index.html` is always revalidated, so a new deploy shows up on the next load. A binary built without the frontend (plain `go build`) answers pages with `503` and a hint to run `make web-build`.
+
+### 6. Run it in Docker
+
+The image is what a deployment runs: three build stages (Node builds the frontend, Go builds a static binary that embeds it, `CGO_ENABLED=0`), and a final image with only the binary on [distroless](https://github.com/GoogleContainerTools/distroless) `static:nonroot`, which adds CA certificates for the Strava API and runs as a non-root user (UID 65532). It is about 6 MB compressed.
+
+```
+make docker-build
+make docker-run
+```
+
+`make docker-run` passes `.env` with `--env-file`, which reads `KEY=value` lines literally: quotes are kept and `export` is not understood. It sets `BASE_URL=http://localhost:8080`, since `.env` points to the dev server. The image defaults to `ENV=prod` (JSON logs, secure cookies, which browsers accept on `http://localhost`). The database is `/data/leaderboard.db` in the `leaderboard-data` volume: it outlives the container, which is removed when it stops. A new volume starts empty; mount a named volume, not `./data`, which belongs to your user and is not writable by UID 65532.
+
+The CLI runs through the same image, against the same volume, also while the server runs:
+
+```
+docker run --rm --env-file .env -e BASE_URL=http://localhost:8080 -v leaderboard-data:/data leaderboard season list
+```
+
+The image has no shell, so `docker exec` cannot open one: use the CLI as above, and `docker logs -f leaderboard` for the logs. `docker stop` sends SIGTERM and the server shuts down gracefully. `.dockerignore` keeps `.env`, the local database and `.git` out of the build.
 
 ### HTTP endpoints
 
@@ -210,6 +231,8 @@ Strava sends no event when a member edits the description (`#competition`) or ch
 | `make web-test` | Run the frontend tests (Vitest) |
 | `make web-check` | Everything CI checks on the frontend: lint, type-check, format, tests, build |
 | `make web-build` | Build the frontend into `internal/spa/dist/` (embedded by `make build`) |
+| `make docker-build` | Build the Docker image `leaderboard` |
+| `make docker-run` | Run the image on port 8080 with `.env` and the `leaderboard-data` volume |
 
 CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s frontend checks on every pull request. Work happens on one branch per ticket (`feature/<number>-<name>`) and lands through a pull request that closes its issue.
 
@@ -232,6 +255,7 @@ internal/testutil/     shared test assertions
 internal/webhook/      Strava webhook endpoint
 internal/worker/       background processing of webhook events
 web/                   React frontend (Vite, TypeScript); builds into internal/spa/dist/
+Dockerfile             multi-stage image build (frontend, Go binary, distroless runtime)
 ```
 
 ### Stack

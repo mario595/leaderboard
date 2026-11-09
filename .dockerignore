@@ -1,0 +1,17 @@
+.env
+.env.*
+data/
+*.db
+*.db-shm
+*.db-wal
+bin/
+**/node_modules
+internal/spa/dist
+.git
+.github
+.vscode
+docs
+assets
+*.md
+**/*_test.go
+**/testdata
