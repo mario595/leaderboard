@@ -68,3 +68,22 @@ jobs:
 
             - name: Build
               run: npm run build
+
+    # Deploys main to Fly.io once every check has passed. Pull requests run the
+    # checks only. One deploy at a time, never cancelled halfway.
+    deploy:
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        needs: [test, lint, web]
+        runs-on: ubuntu-latest
+        concurrency:
+            group: deploy
+            cancel-in-progress: false
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: superfly/flyctl-actions/setup-flyctl@1.5
+
+            - name: Deploy
+              run: flyctl deploy --remote-only
+              env:
+                FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
