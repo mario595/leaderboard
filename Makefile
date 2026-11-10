@@ -53,18 +53,22 @@ strava-subscription:
 		-d client_id="$$STRAVA_CLIENT_ID" -d client_secret="$$STRAVA_CLIENT_SECRET"; echo
 
 # Create the subscription. The server must be reachable at CALLBACK: Strava
-# calls it during this request to check STRAVA_VERIFY_TOKEN.
+# calls it during this request to check the verify token. VERIFY_TOKEN, when
+# set, replaces STRAVA_VERIFY_TOKEN from .env (production has its own token):
+#   VERIFY_TOKEN=<token> make strava-subscribe CALLBACK=...
 strava-subscribe:
 	@test -n "$(CALLBACK)" || { echo "usage: make strava-subscribe CALLBACK=https://<host>/webhook/strava"; exit 2; }
 	@$(LOAD_ENV); curl -sS -X POST $(STRAVA_SUBSCRIPTIONS) \
 		-F client_id="$$STRAVA_CLIENT_ID" -F client_secret="$$STRAVA_CLIENT_SECRET" \
-		-F callback_url="$(CALLBACK)" -F verify_token="$$STRAVA_VERIFY_TOKEN"; echo
+		-F callback_url="$(CALLBACK)" -F verify_token="$${VERIFY_TOKEN:-$$STRAVA_VERIFY_TOKEN}"; echo
 
 # Delete the subscription with the given ID (Strava answers 204 on success).
+# Strava reads the credentials of a DELETE from the query string only (-G);
+# in a form body it answers 404.
 strava-unsubscribe:
 	@test -n "$(ID)" || { echo "usage: make strava-unsubscribe ID=<subscription id>"; exit 2; }
-	@$(LOAD_ENV); curl -sS -X DELETE "$(STRAVA_SUBSCRIPTIONS)/$(ID)" -w "HTTP %{http_code}\n" \
-		-F client_id="$$STRAVA_CLIENT_ID" -F client_secret="$$STRAVA_CLIENT_SECRET"
+	@$(LOAD_ENV); curl -sS -G -X DELETE "$(STRAVA_SUBSCRIPTIONS)/$(ID)" -w "HTTP %{http_code}\n" \
+		-d client_id="$$STRAVA_CLIENT_ID" -d client_secret="$$STRAVA_CLIENT_SECRET"
 
 # Docker image: the frontend and a static binary on distroless (see Dockerfile).
 docker-build:

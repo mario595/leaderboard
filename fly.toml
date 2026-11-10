@@ -1,0 +1,45 @@
+# Fly.io configuration: one always-on machine with the SQLite volume.
+# Secrets (Strava ID and secret, verify token, subscription ID) are set with
+# `fly secrets`, never here: this file is committed.
+
+app = "ligadaples"
+primary_region = "cdg"
+# SIGTERM is the container convention; our NotifyContext handles it. Fly's
+# default is SIGINT with 5 s, shorter than our 10 s HTTP shutdown plus the
+# background jobs.
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+# Builds the root Dockerfile on Fly's builders.
+[build]
+
+# Not secret. The image sets ENV=prod, DB_PATH and ADDR.
+[env]
+  BASE_URL = "https://ligadaples.fly.dev"
+  LOG_LEVEL = "info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Always on: a stopped machine runs no worker, backfill or reconcile.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# The SQLite database. One volume attaches to one machine: never scale
+# beyond 1.
+[mounts]
+  source = "leaderboard_data"
+  destination = "/data"
+  snapshot_retention = 14
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
