@@ -6,7 +6,7 @@ This is also a **learning project** for Go. The code is written step by step, ti
 
 ## Status
 
-Work in progress. What exists today:
+Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What exists today:
 
 - Sign in with Strava (OAuth), which updates a member's name and tokens; new members need an invitation link to sign up, managed with a CLI
 - Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
@@ -27,7 +27,7 @@ Work in progress. What exists today:
 - CI (format, vet, tests, lint)
 - A Docker image of about 6 MB to download: the frontend and a static binary on a distroless base, with the database on a volume
 
-Not built yet: a deployment. The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
+The planned work is tracked as issues in this repository and on its [project board](https://github.com/users/mario595/projects/6).
 
 ## How points work
 
@@ -54,7 +54,7 @@ No C compiler is needed: the SQLite driver is pure Go. (`go test -race` does nee
 ### 1. Create a Strava API application
 
 1. Go to <https://www.strava.com/settings/api> and create an application.
-2. Set the **Authorization Callback Domain** to `localhost`.
+2. Set the **Authorization Callback Domain** to `localhost` (production uses its own domain; Strava always allows `localhost`, so one application serves both, see [Deploy](#deploy)).
 3. Note the **Client ID** and **Client Secret**. Keep the secret private.
 
 A new Strava application starts in single-player mode: only the account that owns the application can sign in. Strava lets you raise that limit from the same page.
@@ -195,7 +195,7 @@ How it works: the app lists the member's activities for the season's dates (one 
 
 Strava notifies the app when a member creates, edits or deletes an activity, by calling a public URL: one subscription per Strava application. The server only stores each event and answers; processing happens in the background.
 
-For local development the server must be reachable from the internet. Any tunnel works:
+Production holds the application's only subscription (see [Deploy](#deploy)); locally, POST a sample event to `http://localhost:8080/webhook/strava` instead. To receive real events locally, the subscription must point to your machine, which must be reachable from the internet. Any tunnel works:
 
 - **A named Cloudflare tunnel on your own domain** (recommended): the URL is stable, so the subscription is created once. Run `cloudflared` as a service with an `ingress` rule for your hostname pointing to `http://localhost:8080` and a final `http_status:404` rule.
 - **A quick tunnel**, no account needed: `cloudflared tunnel --url http://localhost:8080` prints a random `https://<name>.trycloudflare.com` URL. It changes on every run, so delete and recreate the subscription each time.
@@ -217,6 +217,35 @@ Create the subscription:
 
 Strava sends no event when a member edits the description (`#competition`) or changes the workout type to Race. Two hours after each new activity the worker fetches it again, which catches the usual edit made right after the upload; later edits are caught by the daily reconcile of the last 7 days. The reconcile lists each member's activities (one request), fetches the details that can change points, as the backfill does, and logs `reconcile pass`, then `reconcile done` per member with `synced` (activities saved, changed or not) and `deleted`.
 
+## Deploy
+
+Production runs on [Fly.io](https://fly.io) at <https://ligadaples.fly.dev>: one always-on machine (`shared-cpu-1x`, 256 MB) in Paris (`cdg`) with a 1 GB volume for the database, about $2.60 a month. Fly builds the `Dockerfile`, serves HTTPS, and checks `/healthz`. The settings are in `fly.toml`.
+
+- **Always on, one machine.** `auto_stop_machines = "off"`: a stopped machine would run no worker, backfill or reconcile. Never scale beyond one machine: the volume attaches to one, and SQLite wants a single writer.
+- **Deploys.** Every push to `main` deploys from CI, after the tests, linter and frontend checks pass (`deploy` job, with a deploy-only token in the `FLY_API_TOKEN` repository secret). A manual `fly deploy` builds from the local folder, uncommitted changes included. A deploy replaces the machine: a few seconds offline, which Strava's webhook retries and the reconcile cover.
+- **Configuration.** Non-secret settings in `fly.toml` (`BASE_URL`, `LOG_LEVEL`; the image sets `ENV=prod`, `DB_PATH`, `ADDR`). Secrets with `fly secrets`: `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_VERIFY_TOKEN` (its own, not the dev one) and `STRAVA_SUBSCRIPTION_ID`. Load them from stdin so they stay out of the shell history: `grep -E '^STRAVA_CLIENT_(ID|SECRET)=' .env | fly secrets import`.
+- **Strava.** One Strava application serves both: its Authorization Callback Domain is `ligadaples.fly.dev`, and Strava always allows `localhost`, so local login keeps working. The single webhook subscription points to production; to recreate it with the production token, start the line with a space to keep it out of the history:
+  ```
+   VERIFY_TOKEN=<production token> make strava-subscribe CALLBACK=https://ligadaples.fly.dev/webhook/strava
+  ```
+  Before inviting members, raise the application from single-player mode to 10 athletes on Strava's API settings page.
+- **CLI.** The image has no shell; run a command directly: `fly ssh console -C "/server season list"`, and the same for `season create`, `invite create`, `backfill`. It sees the production settings, so invitation links start with the production URL.
+- **Logs.** `fly logs` follows them live (JSON lines); the dashboard keeps recent logs only.
+- **Shutdown.** Fly sends SIGTERM and allows 30 seconds (`kill_signal`, `kill_timeout`), enough for the graceful shutdown.
+
+### Backups
+
+- **Automatic:** Fly snapshots the volume every day and keeps 14 days (`fly volumes snapshots list <volume id>`).
+- **Manual, before risky changes** (a migration, a data fix, the end of a season): `server backup` writes a consistent copy with SQLite's `VACUUM INTO`, while the app runs. Write it to `/tmp`, which is not on the volume and is cleared on the next restart (Fly's sftp cannot delete files):
+  ```
+  fly ssh console -C "/server backup -out /tmp/backup-YYYY-MM-DD.db"
+  fly ssh sftp get /tmp/backup-YYYY-MM-DD.db
+  ```
+  The command refuses an existing file. A backup holds the members' Strava tokens: keep it private.
+- **What a total loss costs:** activities and points come back with a backfill from Strava, seasons are recreated with the CLI; members need a new invitation link and one login each.
+
+Restore from a snapshot: create a volume from it (`fly volumes create leaderboard_data --snapshot-id <snapshot id> --region cdg --size 1`), then run the machine on the new volume instead of the old one (see Fly's [volume snapshot docs](https://fly.io/docs/volumes/snapshots/)). These steps have not been rehearsed yet: try them once on a scratch app before relying on them. A downloaded backup is mainly an off-site copy; restoring it would mean uploading it with `fly ssh sftp put` and swapping it in while the app is stopped, which the image (no shell) does not support yet.
+
 ## Development
 
 | Command | What it does |
@@ -234,7 +263,7 @@ Strava sends no event when a member edits the description (`#competition`) or ch
 | `make docker-build` | Build the Docker image `leaderboard` |
 | `make docker-run` | Run the image on port 8080 with `.env` and the `leaderboard-data` volume |
 
-CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s frontend checks on every pull request. Work happens on one branch per ticket (`feature/<number>-<name>`) and lands through a pull request that closes its issue.
+CI runs the Go checks (format, `go vet`, tests, linter) and `make web-check`'s frontend checks on every pull request, and deploys `main` once they pass. Work happens on one branch per ticket (`feature/<number>-<name>`) and lands through a pull request that closes its issue.
 
 ### Project layout
 
@@ -256,6 +285,7 @@ internal/webhook/      Strava webhook endpoint
 internal/worker/       background processing of webhook events
 web/                   React frontend (Vite, TypeScript); builds into internal/spa/dist/
 Dockerfile             multi-stage image build (frontend, Go binary, distroless runtime)
+fly.toml               Fly.io settings: machine, volume, health check
 ```
 
 ### Stack
@@ -275,6 +305,6 @@ Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all 
 
 ## Security notes
 
-- The Strava client secret and the users' tokens are secrets. They live in `.env` and in the database file, both git-ignored. They are never logged.
+- The Strava client secret and the users' tokens are secrets. They live in `.env` and in the database file, both git-ignored, and in production in `fly secrets` and the volume. They are never logged. Database backups contain the tokens.
 - Tokens are currently stored in plain text in SQLite. Encrypting them at rest is a planned improvement.
 - An invitation code works like a shared password with a limited number of uses: share links only with the group, and revoke one that leaks (`invite revoke`). Codes are never logged.
