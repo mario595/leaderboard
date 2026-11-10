@@ -59,8 +59,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "backfill failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "backup":
+		if err := runBackup(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "backup failed: %v\n", err)
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season, backfill or serve")
+		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season, backfill, backup or serve")
 		os.Exit(2)
 	}
 }
@@ -78,6 +83,19 @@ func runBackfill(args []string) error {
 	seasons := store.NewSeasonStore(db)
 	jobs := store.NewBackfillStore(db)
 	return backfillCommand(ctx, seasons, jobs, args, os.Stdout)
+}
+
+func runBackup(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	_, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	return backupCommand(ctx, db, args, os.Stdout)
 }
 
 func runInvite(args []string) error {
