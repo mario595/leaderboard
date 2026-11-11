@@ -346,7 +346,10 @@ func newTestAPIWithLimiter(fake *fakeStrava, tokens TokenStore, timeout time.Dur
 			AuthStyle: oauth2.AuthStyleInParams, // as Strava requires
 		},
 	}
-	return New(cfg, &http.Client{Timeout: timeout}, tokens, fake.srv.URL, limiter)
+	api := New(cfg, &http.Client{Timeout: timeout}, tokens, fake.srv.URL, limiter)
+	// The deauthorize endpoint is outside the API root; New sets Strava's.
+	api.deauthorizeURL = fake.srv.URL + "/oauth/deauthorize"
+	return api
 }
 
 func validToken() *oauth2.Token {
@@ -383,11 +386,16 @@ type fakeStrava struct {
 	apiPath      string
 	listBody     string     // set by tests: replaces the first page of activities
 	listQuery    url.Values // the query of the last activity list request
+
+	deauthStatus      int // set by tests before the first request
+	deauthCalls       int
+	deauthToken       string // the access_token form value of the last deauthorize
+	deauthContentType string
 }
 
 func newFakeStrava(t *testing.T) *fakeStrava {
 	t.Helper()
-	f := &fakeStrava{apiStatus: http.StatusOK, tokenStatus: http.StatusOK, rateUsage: "31,512"}
+	f := &fakeStrava{apiStatus: http.StatusOK, tokenStatus: http.StatusOK, deauthStatus: http.StatusOK, rateUsage: "31,512"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
@@ -506,9 +514,41 @@ func newFakeStrava(t *testing.T) *fakeStrava {
 		_, _ = w.Write(data)
 	})
 
+	// Revoking the app's access: Strava takes the access token as a form
+	// value and answers with the revoked token.
+	mux.HandleFunc("POST /oauth/deauthorize", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		f.deauthCalls++
+		f.deauthToken = r.PostForm.Get("access_token")
+		f.deauthContentType = r.Header.Get("Content-Type")
+		status, usage := f.deauthStatus, f.rateUsage
+		f.mu.Unlock()
+
+		w.Header().Set("X-RateLimit-Limit", "200,2000")
+		w.Header().Set("X-RateLimit-Usage", usage)
+		if status != http.StatusOK {
+			http.Error(w, `{"message":"error"}`, status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"revoked"}`))
+	})
+
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
+}
+
+// deauthorized returns what the fake saw on /oauth/deauthorize: how many
+// calls, the last token sent and its Content-Type.
+func (f *fakeStrava) deauthorized() (calls int, token, contentType string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.deauthCalls, f.deauthToken, f.deauthContentType
 }
 
 func (f *fakeStrava) refreshCount() int {
