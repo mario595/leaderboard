@@ -30,6 +30,14 @@ describe('PrivacyPage', () => {
     ['who sees what', /Tus actividades solo las ves tú/],
     ['the host and region', /región de París/],
     ['the backup retention', /14 días/],
+    [
+      'leaving from the app, with a written confirmation (2.5)',
+      /Desconectar y borrar mis datos/,
+    ],
+    [
+      'the confirmation when leaving from Strava (2.5)',
+      /esta política es la\s+confirmación de que el borrado se hace/,
+    ],
     ['the complaint authority', /Agencia Española de Protección de Datos/],
     [
       'the Strava usage data statement (6.5)',

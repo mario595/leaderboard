@@ -14,6 +14,39 @@ const MONTHS = [
   'dic',
 ]
 
+// Full Spanish month names, for dates written out in sentences.
+const MONTH_NAMES = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+]
+
+// formatLongDate turns an API date ("2026-11-25") into "25 de noviembre de
+// 2026", splitting the string (see formatShortDate).
+export function formatLongDate(iso: string): string {
+  const [year, month, day] = iso.split('-')
+  return `${Number(day)} de ${MONTH_NAMES[Number(month) - 1]} de ${year}`
+}
+
+// formatDateTime turns an RFC 3339 instant ("2026-11-11T15:04:05Z") into
+// the reader's local date and time: "11 de noviembre de 2026, 16:04" in
+// Madrid. Unlike a date-only string, a full instant parses safely.
+export function formatDateTime(instant: string): string {
+  const d = new Date(instant)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${d.getDate()} de ${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}, ${hh}:${mm}`
+}
+
 // Spanish weekday abbreviations, Sunday first (as Date.getDay counts).
 const WEEKDAY = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 

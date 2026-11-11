@@ -58,14 +58,16 @@ export function JoinPage() {
               y tus puntos. Tus actividades solo las ves tú.
             </li>
             <li>
-              <strong>Retirar tu consentimiento:</strong> cuando quieras,
-              retirando el acceso a la aplicación en Strava (Ajustes → Mis
-              aplicaciones). Al hacerlo borramos todos tus datos.
+              <strong>Retirar tu consentimiento:</strong> cuando quieras, desde
+              «Mis actividades» o retirando el acceso a la aplicación en Strava
+              (Ajustes → Mis aplicaciones). Al hacerlo borramos todos tus datos.
             </li>
             <li>
-              <strong>Pedir el borrado:</strong> también escribiendo a{' '}
+              <strong>Pedir el borrado:</strong> con el botón «Desconectar y
+              borrar mis datos» de «Mis actividades», o escribiendo a{' '}
               <a href={`mailto:${supportEmail}`}>{supportEmail}</a>. Te
-              confirmaremos el borrado cuando esté hecho.
+              confirmaremos el borrado cuando esté hecho: en la aplicación al
+              momento, o por email.
             </li>
           </ul>
 

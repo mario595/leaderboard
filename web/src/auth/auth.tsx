@@ -28,8 +28,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: 'anonymous' })
   }
 
+  function accountDeleted() {
+    setState({ status: 'anonymous' })
+  }
+
   return (
-    <AuthContext.Provider value={{ ...state, logout }}>
+    <AuthContext.Provider value={{ ...state, logout, accountDeleted }}>
       {children}
     </AuthContext.Provider>
   )
