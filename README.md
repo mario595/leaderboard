@@ -23,6 +23,7 @@ Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What
 - A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
+- A privacy policy and terms of use, public and linked from every page with the support contact (see [Legal pages](#legal-pages))
 - A health endpoint, structured logging and graceful shutdown; a request the browser abandons is logged at Debug with status 499, not as a server error
 - CI (format, vet, tests, lint)
 - A Docker image of about 6 MB to download: the frontend and a static binary on a distroless base, with the database on a volume
@@ -302,6 +303,16 @@ For each member the app stores:
 - the backfill jobs that import their seasons.
 
 Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all of it: Strava sends a deauthorization event, and the app removes the member, their activities and their events in one transaction. Any open session of that member stops working on its next request. Signing in again starts from scratch.
+
+## Legal pages
+
+The privacy policy (`/privacy`) and the terms of use (`/terms`) are public pages of the frontend, in Spanish: `web/src/pages/PrivacyPage.tsx` and `web/src/pages/TermsPage.tsx`. The support contact, the data controller and the "last updated" date live in `web/src/legal.ts`. Every page links to them from its footer, together with the support email and, for a logged-in member, their Strava profile (Strava API Policy 2.4).
+
+Keep them in sync with [Your data](#your-data). Any change to what the app collects needs:
+- both pages updated, and `policyUpdated` changed;
+- members told, and their consent asked for again before the new data is read (Strava API Policy 7.2).
+
+`web/src/pages/LegalPages.test.tsx` pins the clauses the Strava API Policy and the GDPR require: the usage data statement (6.5), deferring to Strava's privacy policy (7.3), the third-party disclaimers (9.2), the legal basis and the retention.
 
 ## Security notes
 
