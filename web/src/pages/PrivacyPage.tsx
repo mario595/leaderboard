@@ -89,7 +89,8 @@ export function PrivacyPage() {
           </p>
           <p>
             La base legal es tu <strong>consentimiento</strong> (artículo 6.1.a
-            del RGPD), que das al conectar tu cuenta de Strava. Puedes retirarlo
+            del RGPD), que das al unirte, en la página de consentimiento que
+            aparece antes de conectar tu cuenta de Strava. Puedes retirarlo
             cuando quieras (ver «Cuánto tiempo los guardamos»), sin que afecte a
             lo tratado antes. La cookie de sesión es estrictamente necesaria
             para el servicio que pides.
