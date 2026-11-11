@@ -4,6 +4,7 @@ import poweredByBlack from '../assets/strava-powered-by-black.svg'
 import poweredByWhite from '../assets/strava-powered-by-white.svg'
 import { AlertIcon, BrandIcon } from '../components/icons'
 import { useAuth } from '../auth/useAuth'
+import { SiteFooter } from '../components/SiteFooter'
 
 // Messages for the reasons the OAuth callback adds as ?error= (see
 // internal/auth/callback.go). An unknown reason gets the generic one.
@@ -16,7 +17,7 @@ const loginErrors: Record<string, string> = {
     'Necesitas una invitación para unirte. Pide el enlace a tu grupo.',
 }
 
-// LoginPage is the only public page. The Strava button is a plain link to the
+// LoginPage is the public entry page. The Strava button is a plain link to the
 // Go server: the OAuth flow needs a full page load to Strava and back, not a
 // client-side route. A logged-in user is sent to the leaderboard.
 export function LoginPage() {
@@ -93,7 +94,9 @@ export function LoginPage() {
             llegan solas.
           </p>
         </div>
-        <footer className="login__footer">
+        {/* A div, not a footer: SiteFooter is the footer, and a footer
+            cannot contain another one. */}
+        <div className="login__footer">
           <picture>
             <source
               srcSet={poweredByWhite}
@@ -101,7 +104,8 @@ export function LoginPage() {
             />
             <img src={poweredByBlack} alt="Powered by Strava" />
           </picture>
-        </footer>
+          <SiteFooter />
+        </div>
       </main>
     </div>
   )
