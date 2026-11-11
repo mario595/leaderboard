@@ -66,9 +66,10 @@ func selectedSeason(ctx context.Context, seasons seasonFinder, now func() time.T
 }
 
 // writeSeasonError answers a failed selectedSeason: 404 when the season does
-// not exist (or none covers today), 400 for an invalid ?season=, 500
-// otherwise. Shared by every handler that takes ?season=.
-func writeSeasonError(w http.ResponseWriter, logger *slog.Logger, err error, seasonParam string) {
+// not exist (or none covers today), 400 for an invalid ?season=, otherwise
+// writeServerError (499 when the client is gone, 500 on a store failure).
+// Shared by every handler that takes ?season=.
+func writeSeasonError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, err error, seasonParam string) {
 	if errors.Is(err, store.ErrNotFound) {
 		logger.Info("season not found", "error", err, "season_param", seasonParam)
 		writeError(w, logger, http.StatusNotFound, "season not found")
@@ -79,6 +80,5 @@ func writeSeasonError(w http.ResponseWriter, logger *slog.Logger, err error, sea
 		writeError(w, logger, http.StatusBadRequest, "invalid season")
 		return
 	}
-	logger.Error("fetching season", "error", err, "season_param", seasonParam)
-	writeError(w, logger, http.StatusInternalServerError, "internal error")
+	writeServerError(w, r, logger, "fetching season", err, "season_param", seasonParam)
 }

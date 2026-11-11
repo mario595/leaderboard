@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -183,12 +184,61 @@ func TestLeaderboardHandler_errors(t *testing.T) {
 	}
 }
 
+// A client that leaves during either store call gets a 499 and a Debug
+// line, not a 500 and an Error line. The live rows are the positive
+// controls: the same failure on a live request is still an error.
+func TestLeaderboardHandler_clientGone(t *testing.T) {
+	testCases := []struct {
+		clientGoneCase
+		setup func(f *leaderboardFixture, err error)
+	}{
+		{
+			clientGoneCase: clientGoneCase{name: "season lookup, client gone", cancelled: true, wantStatus: 499, wantLevel: "DEBUG", wantMsg: "request canceled by client",
+				wantAttrs: map[string]any{"season_param": "", "path": "/api/leaderboard"}},
+			setup: func(f *leaderboardFixture, err error) { f.seasons.currentErr = err },
+		},
+		{
+			clientGoneCase: clientGoneCase{name: "season lookup, store fails", wantStatus: http.StatusInternalServerError, wantLevel: "ERROR", wantMsg: "fetching season",
+				wantAttrs: map[string]any{"season_param": ""}},
+			setup: func(f *leaderboardFixture, err error) { f.seasons.currentErr = err },
+		},
+		{
+			clientGoneCase: clientGoneCase{name: "standings, client gone", cancelled: true, wantStatus: 499, wantLevel: "DEBUG", wantMsg: "request canceled by client",
+				wantAttrs: map[string]any{"season_id": float64(3), "path": "/api/leaderboard"}},
+			setup: func(f *leaderboardFixture, err error) { f.standings.err = err },
+		},
+		{
+			clientGoneCase: clientGoneCase{name: "standings, store fails", wantStatus: http.StatusInternalServerError, wantLevel: "ERROR", wantMsg: "get standings",
+				wantAttrs: map[string]any{"season_id": float64(3)}},
+			setup: func(f *leaderboardFixture, err error) { f.standings.err = err },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLeaderboardFixture(t)
+			f.cancelled = tc.cancelled
+			err := errStoreDown
+			if tc.cancelled {
+				err = errCanceledQuery
+			}
+			tc.setup(f, err)
+
+			rec := f.get(t, "/api/leaderboard")
+
+			assertServerErrorResponse(t, tc.clientGoneCase, rec, &f.logs)
+		})
+	}
+}
+
 var errStoreDown = errors.New("database is locked")
 
 type leaderboardFixture struct {
 	seasons   *fakeSeasons
 	standings *fakeStandings
 	now       time.Time
+	cancelled bool         // send the request with a cancelled context
+	logs      bytes.Buffer // the handler's log, at Debug and above, as JSON
 }
 
 func newLeaderboardFixture(t *testing.T) *leaderboardFixture {
@@ -208,8 +258,15 @@ func newLeaderboardFixture(t *testing.T) *leaderboardFixture {
 
 func (f *leaderboardFixture) get(t *testing.T, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	h := leaderboardHandler(f.seasons, f.standings, func() time.Time { return f.now }, slog.New(slog.DiscardHandler))
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+	logger := slog.New(slog.NewJSONHandler(&f.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	h := leaderboardHandler(f.seasons, f.standings, func() time.Time { return f.now }, logger)
+	ctx := t.Context()
+	if f.cancelled {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		cancel()
+	}
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -219,6 +276,7 @@ type fakeSeasons struct {
 	current       store.Season
 	currentErr    error
 	byID          map[int64]store.Season
+	getErr        error // returned by Get instead of a lookup in byID
 	currentCalled bool
 	askedDate     time.Time
 	askedIDs      []int64
@@ -235,6 +293,9 @@ func (f *fakeSeasons) Current(_ context.Context, date time.Time) (store.Season, 
 
 func (f *fakeSeasons) Get(_ context.Context, id int64) (store.Season, error) {
 	f.askedIDs = append(f.askedIDs, id)
+	if f.getErr != nil {
+		return store.Season{}, f.getErr
+	}
 	s, ok := f.byID[id]
 	if !ok {
 		return store.Season{}, store.ErrNotFound

@@ -149,8 +149,15 @@ func newAuthApp(t *testing.T) *authApp {
 // do sends a request to the app and returns what the tests look at.
 func (a *authApp) do(t *testing.T, path string, cookies ...*http.Cookie) (status int, body string, header http.Header, set []*http.Cookie) {
 	t.Helper()
+	return a.doCtx(t, t.Context(), path, cookies...)
+}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+// doCtx is do with the request's context given, for example an already
+// cancelled one to act as a client that went away.
+func (a *authApp) doCtx(t *testing.T, ctx context.Context, path string, cookies ...*http.Cookie) (status int, body string, header http.Header, set []*http.Cookie) {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 	for _, c := range cookies {
 		req.AddCookie(c)
 	}

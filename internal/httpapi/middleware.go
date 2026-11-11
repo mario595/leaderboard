@@ -50,7 +50,9 @@ type userKey struct{}
 // session's user no longer exists (deleted after a Strava deauthorization) it
 // destroys the session and answers 401, on every route it guards. When the
 // user store fails it answers 500 and keeps the session: an outage is not a
-// logout. It relies on the session middleware (LoadAndSave) having run first.
+// logout. A lookup that fails because the client went away is not a store
+// failure: writeServerError logs it at Debug and records a 499. It relies on
+// the session middleware (LoadAndSave) having run first.
 func requireAuth(sessions *scs.SessionManager, users userGetter, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,8 +73,7 @@ func requireAuth(sessions *scs.SessionManager, users userGetter, logger *slog.Lo
 					writeError(w, logger, http.StatusUnauthorized, "unauthorized")
 					return
 				}
-				logger.Error("look up session user", "user_id", userID, "error", err)
-				writeError(w, logger, http.StatusInternalServerError, "internal error")
+				writeServerError(w, r, logger, "look up session user", err, "user_id", userID)
 				return
 			}
 			ctx := context.WithValue(r.Context(), userKey{}, user)

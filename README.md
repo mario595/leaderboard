@@ -23,7 +23,7 @@ Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What
 - A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
-- A health endpoint, structured logging and graceful shutdown
+- A health endpoint, structured logging and graceful shutdown; a request the browser abandons is logged at Debug with status 499, not as a server error
 - CI (format, vet, tests, lint)
 - A Docker image of about 6 MB to download: the frontend and a static binary on a distroless base, with the database on a volume
 

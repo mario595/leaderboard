@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -247,6 +248,54 @@ func TestActivitiesHandler_errors(t *testing.T) {
 	}
 }
 
+// Same as TestLeaderboardHandler_clientGone, for the season lookup and the
+// activity list.
+func TestActivitiesHandler_clientGone(t *testing.T) {
+	testCases := []struct {
+		clientGoneCase
+		setup func(f *activitiesFixture, err error)
+	}{
+		{
+			clientGoneCase: clientGoneCase{name: "season lookup, client gone", cancelled: true, wantStatus: 499, wantLevel: "DEBUG", wantMsg: "request canceled by client",
+				wantAttrs: map[string]any{"season_param": "3", "path": "/api/me/activities"}},
+			setup: func(f *activitiesFixture, err error) { f.seasons.byID = nil; f.seasons.getErr = err },
+		},
+		{
+			clientGoneCase: clientGoneCase{name: "season lookup, store fails", wantStatus: http.StatusInternalServerError, wantLevel: "ERROR", wantMsg: "fetching season",
+				wantAttrs: map[string]any{"season_param": "3"}},
+			setup: func(f *activitiesFixture, err error) { f.seasons.byID = nil; f.seasons.getErr = err },
+		},
+		{
+			clientGoneCase: clientGoneCase{name: "activity list, client gone", cancelled: true, wantStatus: 499, wantLevel: "DEBUG", wantMsg: "request canceled by client",
+				wantAttrs: map[string]any{"user_id": float64(7), "path": "/api/me/activities"}},
+			setup: func(f *activitiesFixture, err error) { f.lister.err = err },
+		},
+		{
+			clientGoneCase: clientGoneCase{name: "activity list, store fails", wantStatus: http.StatusInternalServerError, wantLevel: "ERROR", wantMsg: "list activities",
+				wantAttrs: map[string]any{"user_id": float64(7)}},
+			setup: func(f *activitiesFixture, err error) { f.lister.err = err },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newActivitiesFixture(t)
+			f.cancelled = tc.cancelled
+			err := errStoreDown
+			if tc.cancelled {
+				err = errCanceledQuery
+			}
+			tc.setup(f, err)
+
+			// ?season=3 so the season path through Get is covered too (the
+			// leaderboard test covers Current).
+			rec := f.get(t, "/api/me/activities?season=3")
+
+			assertServerErrorResponse(t, tc.clientGoneCase, rec, &f.logs)
+		})
+	}
+}
+
 func TestActivitiesHandler_limitBounds(t *testing.T) {
 	// Positive controls for the limit check: 1 and 100 are allowed.
 	for _, limit := range []string{"1", "100"} {
@@ -257,9 +306,11 @@ func TestActivitiesHandler_limitBounds(t *testing.T) {
 }
 
 type activitiesFixture struct {
-	seasons *fakeSeasons
-	lister  *fakeLister
-	noUser  bool
+	seasons   *fakeSeasons
+	lister    *fakeLister
+	noUser    bool
+	cancelled bool         // send the request with a cancelled context
+	logs      bytes.Buffer // the handler's log, at Debug and above, as JSON
 }
 
 func newActivitiesFixture(t *testing.T) *activitiesFixture {
@@ -289,8 +340,14 @@ func newActivitiesFixture(t *testing.T) *activitiesFixture {
 
 func (f *activitiesFixture) get(t *testing.T, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	h := activitiesHandler(f.seasons, f.lister, func() time.Time { return time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC) }, slog.New(slog.DiscardHandler))
+	logger := slog.New(slog.NewJSONHandler(&f.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	h := activitiesHandler(f.seasons, f.lister, func() time.Time { return time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC) }, logger)
 	ctx := t.Context()
+	if f.cancelled {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		cancel()
+	}
 	if !f.noUser {
 		// What requireAuth puts in the context for the logged-in user.
 		ctx = context.WithValue(ctx, userKey{}, store.User{ID: 7, FirstName: "Ada"})
