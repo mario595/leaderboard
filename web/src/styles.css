@@ -437,9 +437,9 @@ body {
   outline-color: var(--color-text);
 }
 
-/* Before consent (JoinPage): the same image, dimmed and not a link. */
+/* Before consent (JoinPage): the same image, unmodified (Strava's
+   guidelines), but not a link; the hint below it says why. */
 .strava-button--disabled {
-  opacity: 0.45;
   cursor: not-allowed;
 }
 

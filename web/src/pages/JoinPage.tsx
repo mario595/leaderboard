@@ -12,7 +12,8 @@ import { supportEmail } from '../legal'
 // code in the session and lands here. It says what the app reads, how, who
 // sees it, how to withdraw and how to ask for deletion (Strava API Policy
 // 2.1), and asks the athlete to agree that the group sees their name and
-// points (5.13). The Strava button is a link only once they agree. Consent
+// points (5.13). The Strava button is a link only once they agree; until
+// then a hint asks them to tick the box. Consent
 // is not stored. A logged-in member is sent to the leaderboard.
 export function JoinPage() {
   const auth = useAuth()
@@ -86,6 +87,8 @@ export function JoinPage() {
             </a>
           ) : (
             // Not a link until the athlete agrees: nothing to click through.
+            // The image stays unmodified (Strava's guidelines); the hint
+            // below says to tick the box.
             <span
               className="strava-button strava-button--disabled"
               aria-disabled="true"
