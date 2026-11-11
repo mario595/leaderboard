@@ -23,7 +23,7 @@ Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What
 - A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
-- A privacy policy and terms of use, public and linked from every page with the support contact (see [Legal pages](#legal-pages))
+- A privacy policy and terms of use, public and linked from every page with the support contact (see [Legal pages](#legal-pages)), and a consent step before a new member connects Strava (`/join`)
 - A health endpoint, structured logging and graceful shutdown; a request the browser abandons is logged at Debug with status 499, not as a server error
 - CI (format, vet, tests, lint)
 - A Docker image of about 6 MB to download: the frontend and a static binary on a distroless base, with the database on a volume
@@ -144,7 +144,7 @@ The image has no shell, so `docker exec` cannot open one: use the CLI as above, 
 | `GET /healthz` | public | Health check |
 | `GET /auth/strava` | public | Starts the Strava sign-in |
 | `GET /auth/strava/callback` | public | Strava redirects here; logs a member in, or signs up a new one with the invitation from the session, and creates the session |
-| `GET /invite/{code}` | public | An invitation link: keeps the code in the session and starts the Strava sign-in |
+| `GET /invite/{code}` | public | An invitation link: keeps the code in the session and sends the browser to the consent page (`/join`), whose button starts the Strava sign-in |
 | `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
 | `GET /api/me` | signed in | The current user, without any token |
 | `GET /api/me/activities` | signed in | The member's own activities in the season (default: current; `?season=<id>`), newest first, every activity with its points (often 0), competition flag and `zeroReason` (why it scored nothing: `sport`, `short` or `daily_cap`; `""` when it scored). Pages of `?limit=` (1 to 100, default 50); pass the response's `nextCursor` as `?cursor=` for the next page (`null` on the last one). Moving time in seconds, distance in metres. |
@@ -308,8 +308,10 @@ Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all 
 
 The privacy policy (`/privacy`) and the terms of use (`/terms`) are public pages of the frontend, in Spanish: `web/src/pages/PrivacyPage.tsx` and `web/src/pages/TermsPage.tsx`. The support contact, the data controller and the "last updated" date live in `web/src/legal.ts`. Every page links to them from its footer, together with the support email and, for a logged-in member, their Strava profile (Strava API Policy 2.4).
 
+An invitation link lands on the consent page, `/join` (`web/src/pages/JoinPage.tsx`), before Strava. It summarises what is read and how, who sees it, how to withdraw and how to ask for deletion (Strava API Policy 2.1), and the "Connect with Strava" button only becomes a link once the athlete agrees that the group sees their name and points (5.13). Consent is not stored, and members who signed up before it existed are not asked.
+
 Keep them in sync with [Your data](#your-data). Any change to what the app collects needs:
-- both pages updated, and `policyUpdated` changed;
+- both pages and the consent page updated, and `policyUpdated` changed;
 - members told, and their consent asked for again before the new data is read (Strava API Policy 7.2).
 
 `web/src/pages/LegalPages.test.tsx` pins the clauses the Strava API Policy and the GDPR require: the usage data statement (6.5), deferring to Strava's privacy policy (7.3), the third-party disclaimers (9.2), the legal basis and the retention.
