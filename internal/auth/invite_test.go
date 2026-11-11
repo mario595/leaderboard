@@ -15,9 +15,10 @@ func TestInvite(t *testing.T) {
 
 	rec := serveInvite(t, h, "ABC234")
 
-	// See Other: the browser follows with a GET to the login.
+	// See Other: the browser follows with a GET to the consent page, not
+	// straight to Strava (consent comes first, Strava API Policy 2.1).
 	testutil.AssertEqual(t, "status", http.StatusSeeOther, rec.Code)
-	testutil.AssertEqual(t, "Location", "/auth/strava", rec.Result().Header.Get("Location"))
+	testutil.AssertEqual(t, "Location", "/join", rec.Result().Header.Get("Location"))
 	session := sessionCookieOf(rec)
 	if session == nil {
 		t.Fatal("no session cookie: the code must survive the trip to Strava")

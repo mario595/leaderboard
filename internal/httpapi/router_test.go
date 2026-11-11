@@ -321,7 +321,7 @@ func TestRouter_authRoutes(t *testing.T) {
 			wantStatus: http.StatusSeeOther,
 		},
 		{
-			// The invitation link stores the code and starts the login.
+			// The invitation link stores the code and sends to the consent page.
 			name:       "invitation link is registered",
 			handler:    authHandler,
 			method:     http.MethodGet,
