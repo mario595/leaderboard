@@ -38,19 +38,19 @@ var errInvalidSeasonParam = errors.New("invalid season param")
 // season covering today (UTC date, from now), or of the season given as
 // ?season=<id>. It answers 400 when ?season= is not a positive integer, 404
 // when there is no current season or the given one does not exist, and 500
-// on store errors. It must sit behind requireAuth.
+// on store errors (499, logged at Debug, when the client went away). It must
+// sit behind requireAuth.
 func leaderboardHandler(seasons seasonFinder, standings standingsQuerier, now func() time.Time, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		seasonParam := r.URL.Query().Get("season")
 		season, err := selectedSeason(r.Context(), seasons, now, seasonParam)
 		if err != nil {
-			writeSeasonError(w, logger, err, seasonParam)
+			writeSeasonError(w, r, logger, err, seasonParam)
 			return
 		}
 		stndngs, err := standings.Standings(r.Context(), season.StartDate, season.EndDate)
 		if err != nil {
-			logger.Error("get standings", "season_id", season.ID, "error", err)
-			writeError(w, logger, http.StatusInternalServerError, "internal error")
+			writeServerError(w, r, logger, "get standings", err, "season_id", season.ID)
 			return
 		}
 

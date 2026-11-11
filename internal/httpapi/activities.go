@@ -65,7 +65,8 @@ var errInvalidLimit = errors.New("invalid limit")
 // first. ?limit= sets the page size (1 to 100, default 50) and ?cursor=
 // continues after a previous page. It reads one row more than the limit to
 // know whether a next page exists. 400 for a bad limit, cursor or season,
-// 404 for a missing season, 500 on store errors. It must sit behind
+// 404 for a missing season, 500 on store errors (499, logged at Debug, when
+// the client went away). It must sit behind
 // requireAuth: the user always comes from the session, never from a
 // parameter.
 func activitiesHandler(seasons seasonFinder, activities activityLister, now func() time.Time, logger *slog.Logger) http.HandlerFunc {
@@ -96,7 +97,7 @@ func activitiesHandler(seasons seasonFinder, activities activityLister, now func
 		seasonParam := r.URL.Query().Get("season")
 		season, err := selectedSeason(r.Context(), seasons, now, seasonParam)
 		if err != nil {
-			writeSeasonError(w, logger, err, seasonParam)
+			writeSeasonError(w, r, logger, err, seasonParam)
 			return
 		}
 
@@ -110,8 +111,7 @@ func activitiesHandler(seasons seasonFinder, activities activityLister, now func
 		)
 
 		if err != nil {
-			logger.Error("list activities", "user_id", u.ID, "error", err)
-			writeError(w, logger, http.StatusInternalServerError, "internal error")
+			writeServerError(w, r, logger, "list activities", err, "user_id", u.ID)
 			return
 		}
 
