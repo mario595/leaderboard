@@ -537,6 +537,10 @@ func TestRouter_spa(t *testing.T) {
 	}{
 		{name: "root", path: "/", wantStatus: http.StatusOK, wantSPA: true},
 		{name: "client route", path: "/activities", wantStatus: http.StatusOK, wantSPA: true},
+		// Public pages: the frontend must get them without a session (the
+		// Strava review opens the privacy policy logged out).
+		{name: "privacy policy, anonymous", path: "/privacy", wantStatus: http.StatusOK, wantSPA: true},
+		{name: "terms, anonymous", path: "/terms", wantStatus: http.StatusOK, wantSPA: true},
 		{name: "nested client route", path: "/a/b/c", wantStatus: http.StatusOK, wantSPA: true},
 		// The recorder keeps the body even for HEAD (a real server drops it).
 		{name: "HEAD", method: http.MethodHead, path: "/rules", wantStatus: http.StatusOK, wantSPA: true},

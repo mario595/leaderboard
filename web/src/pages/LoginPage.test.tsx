@@ -21,7 +21,7 @@ describe('LoginPage', () => {
     renderLogin('/login')
 
     const button = await screen.findByRole('link', {
-      name: /strava/i,
+      name: 'Connect with Strava',
     })
     // A plain link to the Go server, not a client-side route: the OAuth
     // dance needs real navigation to Strava and back.
@@ -48,7 +48,7 @@ describe('LoginPage', () => {
   it('shows no error banner on a normal visit', async () => {
     renderLogin('/login')
 
-    await screen.findByRole('link', { name: /strava/i })
+    await screen.findByRole('link', { name: 'Connect with Strava' })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -67,7 +67,9 @@ describe('LoginPage', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(message)
     // The button stays usable: trying again is the way out.
-    expect(screen.getByRole('link', { name: /strava/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Connect with Strava' }),
+    ).toBeInTheDocument()
   })
 })
 

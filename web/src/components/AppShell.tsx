@@ -7,10 +7,11 @@ import {
   StandingsIcon,
 } from './icons'
 import { useAuth } from '../auth/useAuth'
+import { SiteFooter } from './SiteFooter'
 
 // AppShell is the frame around every logged-in page: the top bar (brand,
-// links on wide screens, the user and logout), the page, and the tab bar on
-// phones. NavLink marks the current page with aria-current="page", which the
+// links on wide screens, the user and logout), the page, the footer, and the
+// tab bar on phones. NavLink marks the current page with aria-current="page", which the
 // styles highlight.
 export function AppShell() {
   const auth = useAuth()
@@ -54,6 +55,8 @@ export function AppShell() {
         <main className="app__main">
           <Outlet />
         </main>
+
+        <SiteFooter />
 
         <nav className="tab-bar" aria-label="Principal (móvil)">
           <NavLink className="tab-bar__link" to="/" end>

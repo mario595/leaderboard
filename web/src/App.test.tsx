@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,7 +18,7 @@ describe('routing by auth state', () => {
     renderAt('/')
 
     expect(
-      await screen.findByRole('link', { name: /strava/i }),
+      await screen.findByRole('link', { name: 'Connect with Strava' }),
     ).toHaveAttribute('href', '/auth/strava')
     expect(
       screen.queryByRole('heading', { name: 'Clasificación' }),
@@ -75,7 +75,7 @@ describe('routing by auth state', () => {
     renderAt('/nope')
 
     expect(
-      await screen.findByRole('link', { name: /strava/i }),
+      await screen.findByRole('link', { name: 'Connect with Strava' }),
     ).toHaveAttribute('href', '/auth/strava')
   })
 
@@ -85,7 +85,7 @@ describe('routing by auth state', () => {
     renderAt('/activities')
 
     expect(
-      await screen.findByRole('link', { name: /strava/i }),
+      await screen.findByRole('link', { name: 'Connect with Strava' }),
     ).toBeInTheDocument()
   })
 
@@ -100,7 +100,7 @@ describe('routing by auth state', () => {
     renderAt('/')
 
     expect(
-      screen.queryByRole('link', { name: /strava/i }),
+      screen.queryByRole('link', { name: 'Connect with Strava' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Clasificación' }),
@@ -115,7 +115,7 @@ describe('routing by auth state', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: /strava/i }),
+      screen.queryByRole('link', { name: 'Connect with Strava' }),
     ).not.toBeInTheDocument()
   })
 
@@ -129,7 +129,7 @@ describe('routing by auth state', () => {
     )
 
     expect(
-      await screen.findByRole('link', { name: /strava/i }),
+      await screen.findByRole('link', { name: 'Connect with Strava' }),
     ).toBeInTheDocument()
     await waitFor(() =>
       expect(server).toHaveBeenCalledWith(
@@ -139,6 +139,126 @@ describe('routing by auth state', () => {
     )
   })
 })
+
+describe('public pages and the footer', () => {
+  const support = 'mailto:leaderboard.oxidant225@aleeas.com'
+
+  it.each([
+    ['/privacy', 'Política de privacidad'],
+    ['/terms', 'Términos de uso'],
+  ])('renders %s for an anonymous visitor', async (path, heading) => {
+    mockServer({ me: 401 })
+
+    renderAt(path)
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: heading }),
+    ).toBeInTheDocument()
+    // Not sent to the login page.
+    expect(
+      screen.queryByRole('link', { name: 'Connect with Strava' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders a public page for a logged-in member too', async () => {
+    mockServer({ me: ana })
+
+    renderAt('/privacy')
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Política de privacidad',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not wait for the session check on a public page', () => {
+    // /api/me never answers: a public page must not depend on it.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    )
+
+    renderAt('/terms')
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Términos de uso' }),
+    ).toBeInTheDocument()
+    expect(footer()).toBeInTheDocument()
+  })
+
+  it.each([
+    ['the login page', '/login'],
+    ['a public page', '/privacy'],
+  ])(
+    'shows the footer without a Strava account link on %s for an anonymous visitor',
+    async (_, path) => {
+      const server = mockServer({ me: 401 })
+
+      renderAt(path)
+      // Wait until the session check has answered, so a missing account link
+      // means "anonymous", not "still loading".
+      await waitFor(() =>
+        expect(server).toHaveBeenCalledWith('/api/me', expect.anything()),
+      )
+      await screen.findByRole('heading', { level: 1 })
+
+      const links = within(await findFooter())
+      expect(links.getByRole('link', { name: 'Privacidad' })).toHaveAttribute(
+        'href',
+        '/privacy',
+      )
+      expect(links.getByRole('link', { name: 'Términos' })).toHaveAttribute(
+        'href',
+        '/terms',
+      )
+      expect(links.getByRole('link', { name: 'Soporte' })).toHaveAttribute(
+        'href',
+        support,
+      )
+      expect(
+        links.queryByRole('link', { name: 'Tu cuenta de Strava' }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([
+    ['the leaderboard', '/', 'Clasificación'],
+    ['a public page', '/terms', 'Términos de uso'],
+  ])(
+    'links a logged-in member to their Strava account on %s',
+    async (_, path, heading) => {
+      mockServer({ me: ana })
+
+      renderAt(path)
+      await screen.findByRole('heading', { level: 1, name: heading })
+
+      const links = within(await findFooter())
+      expect(links.getByRole('link', { name: 'Privacidad' })).toHaveAttribute(
+        'href',
+        '/privacy',
+      )
+      expect(links.getByRole('link', { name: 'Soporte' })).toHaveAttribute(
+        'href',
+        support,
+      )
+      expect(
+        await links.findByRole('link', { name: 'Tu cuenta de Strava' }),
+      ).toHaveAttribute('href', 'https://www.strava.com/athletes/12345678')
+    },
+  )
+})
+
+// The footer is found by its navigation landmark, not by <footer>: a footer
+// inside <main> (as on the login page) has no contentinfo role.
+function footer() {
+  return screen.getByRole('navigation', { name: 'Pie de página' })
+}
+
+function findFooter() {
+  return screen.findByRole('navigation', { name: 'Pie de página' })
+}
 
 function renderAt(path: string) {
   return render(
