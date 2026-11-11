@@ -224,7 +224,15 @@ func runServer() error {
 			Seasons:    seasonStore,
 			Standings:  activityStore,
 			Activities: activityStore,
-			SPA:        spa.Handler(),
+			Accounts:   userStore,
+			Revoke: func(ctx context.Context, u store.User) error {
+				return api.ForUser(u.ID, &oauth2.Token{
+					AccessToken:  u.AccessToken,
+					RefreshToken: u.RefreshToken,
+					Expiry:       u.TokenExpiresAt,
+				}).Deauthorize(ctx)
+			},
+			SPA: spa.Handler(),
 		},
 	)
 

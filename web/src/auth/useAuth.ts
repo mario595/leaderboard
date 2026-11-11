@@ -7,7 +7,12 @@ export type AuthState =
   | { status: 'error' }
   | { status: 'user'; user: Me }
 
-export type Auth = AuthState & { logout: () => Promise<void> }
+// logout ends the session on the server; accountDeleted only forgets the
+// user, after DELETE /api/me has already ended every session.
+export type Auth = AuthState & {
+  logout: () => Promise<void>
+  accountDeleted: () => void
+}
 
 export const AuthContext = createContext<Auth | null>(null)
 

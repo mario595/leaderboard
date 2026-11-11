@@ -29,6 +29,26 @@ export async function getJSON<T>(
   return (await res.json()) as T
 }
 
+// AccountDeletion is the body of DELETE /api/me: the written confirmation
+// of the deletion. deletedAt is RFC 3339 (UTC); backupsGoneBy is YYYY-MM-DD.
+export type AccountDeletion = {
+  deletedAt: string
+  backupsGoneBy: string
+}
+
+// deleteAccount deletes the logged-in member's account and everything about
+// them (DELETE /api/me). A non-2xx answer throws an ApiError.
+export async function deleteAccount(): Promise<AccountDeletion> {
+  const res = await fetch('/api/me', {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) {
+    throw new ApiError(res.status)
+  }
+  return (await res.json()) as AccountDeletion
+}
+
 // Me is the body of GET /api/me.
 export type Me = {
   id: number

@@ -80,8 +80,9 @@ export function TermsPage() {
         <section className="legal__section">
           <h2>Baja</h2>
           <p>
-            Puedes dejar de usar la aplicación cuando quieras retirándole el
-            acceso en Strava. Qué pasa entonces con tus datos está en la{' '}
+            Puedes darte de baja cuando quieras desde «Mis actividades»
+            («Desconectar y borrar mis datos») o retirando el acceso a la
+            aplicación en Strava. Qué pasa entonces con tus datos está en la{' '}
             <Link to="/privacy">política de privacidad</Link>.
           </p>
         </section>

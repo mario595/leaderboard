@@ -21,19 +21,22 @@ const DefaultBaseURL = "https://www.strava.com/api/v3"
 // token store, API root, rate limiter) and builds one Client per user with
 // ForUser.
 type API struct {
-	cfg     *oauth2.Config
-	http    *http.Client // base client: timeout, transport
-	tokens  TokenStore
-	baseURL string
-	limiter *rate.Limiter // nil: no limit
+	cfg            *oauth2.Config
+	http           *http.Client // base client: timeout, transport
+	tokens         TokenStore
+	baseURL        string
+	deauthorizeURL string        // DefaultDeauthorizeURL; tests point it at a fake
+	limiter        *rate.Limiter // nil: no limit
 }
 
 // Client calls the Strava API on behalf of one user. Its HTTP client adds the
 // user's access token to every request and refreshes it when it expires.
 type Client struct {
-	http    *http.Client
-	baseURL string
-	limiter *rate.Limiter // the API's, shared with every other client
+	http           *http.Client
+	src            oauth2.TokenSource // the user's tokens, refreshed and saved on demand
+	baseURL        string
+	deauthorizeURL string
+	limiter        *rate.Limiter // the API's, shared with every other client
 }
 
 // TokenStore saves a user's refreshed tokens. It is defined here, where it is
@@ -48,11 +51,12 @@ type TokenStore interface {
 // every client built from this API; nil means no limit.
 func New(cfg *oauth2.Config, base *http.Client, tokens TokenStore, baseURL string, limiter *rate.Limiter) *API {
 	return &API{
-		cfg:     cfg,
-		http:    base,
-		tokens:  tokens,
-		baseURL: baseURL,
-		limiter: limiter,
+		cfg:            cfg,
+		http:           base,
+		tokens:         tokens,
+		baseURL:        baseURL,
+		deauthorizeURL: DefaultDeauthorizeURL,
+		limiter:        limiter,
 	}
 }
 
@@ -72,8 +76,10 @@ func (a *API) ForUser(userID int64, tok *oauth2.Token) *Client {
 			Timeout:   a.http.Timeout,
 			Transport: &oauth2.Transport{Source: src, Base: a.http.Transport},
 		},
-		baseURL: a.baseURL,
-		limiter: a.limiter,
+		src:            src,
+		baseURL:        a.baseURL,
+		deauthorizeURL: a.deauthorizeURL,
+		limiter:        a.limiter,
 	}
 }
 
@@ -96,34 +102,12 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		var retrieveErr *oauth2.RetrieveError
-		if errors.As(err, &retrieveErr) && retrieveErr.Response != nil &&
-			(retrieveErr.Response.StatusCode == http.StatusBadRequest || retrieveErr.Response.StatusCode == http.StatusUnauthorized) {
-			return fmt.Errorf("strava GET %s: %w: %w", path, ErrUnauthorized, err)
-		}
-		return fmt.Errorf("strava GET %s: %w", path, err)
+		return requestError("strava GET "+path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		switch resp.StatusCode {
-		case http.StatusNotFound:
-			return fmt.Errorf("strava GET %s: %w", path, ErrNotFound)
-		case http.StatusUnauthorized:
-			return fmt.Errorf("strava GET %s: %w", path, ErrUnauthorized)
-		case http.StatusTooManyRequests:
-			shortUsage, dailyUsage := parsePair(resp.Header.Get("X-RateLimit-Usage"))
-			shortLimit, dailyLimit := parsePair(resp.Header.Get("X-RateLimit-Limit"))
-			rateLimitErr := &RateLimitError{
-				ShortUsage: shortUsage,
-				DailyUsage: dailyUsage,
-				ShortLimit: shortLimit,
-				DailyLimit: dailyLimit,
-			}
-			return fmt.Errorf("strava GET %s: %w", path, rateLimitErr)
-		default:
-			return fmt.Errorf("strava GET %s: status %d", path, resp.StatusCode)
-		}
+		return statusError("strava GET "+path, resp)
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(out)
@@ -132,6 +116,43 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	}
 
 	return nil
+}
+
+// requestError wraps an error from sending a request (or from getting its
+// token) under op. A refresh that Strava rejected (400 or 401 from the token
+// endpoint) also wraps ErrUnauthorized, next to the *oauth2.RetrieveError;
+// any other failure, such as a 500 from the token endpoint, is transient.
+func requestError(op string, err error) error {
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && retrieveErr.Response != nil &&
+		(retrieveErr.Response.StatusCode == http.StatusBadRequest || retrieveErr.Response.StatusCode == http.StatusUnauthorized) {
+		return fmt.Errorf("%s: %w: %w", op, ErrUnauthorized, err)
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
+// statusError turns a response whose status is not 200 into an error under
+// op: 404, 401 and 429 become ErrNotFound, ErrUnauthorized and
+// *RateLimitError (from the X-RateLimit headers); any other status is a plain
+// error that names it.
+func statusError(op string, resp *http.Response) error {
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return fmt.Errorf("%s: %w", op, ErrNotFound)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("%s: %w", op, ErrUnauthorized)
+	case http.StatusTooManyRequests:
+		shortUsage, dailyUsage := parsePair(resp.Header.Get("X-RateLimit-Usage"))
+		shortLimit, dailyLimit := parsePair(resp.Header.Get("X-RateLimit-Limit"))
+		return fmt.Errorf("%s: %w", op, &RateLimitError{
+			ShortUsage: shortUsage,
+			DailyUsage: dailyUsage,
+			ShortLimit: shortLimit,
+			DailyLimit: dailyLimit,
+		})
+	default:
+		return fmt.Errorf("%s: status %d", op, resp.StatusCode)
+	}
 }
 
 // parsePair parses a Strava rate-limit header such as "201,1803" into its

@@ -332,26 +332,30 @@ function renderPage() {
 
 // dayHeadings returns the text of each day's heading (date and points).
 function dayHeadings(): string[] {
+  return dayHeadingElements().map((h) => h.textContent ?? '')
+}
+
+// dayHeadingElements returns the days' h2 headings only: the page has other
+// h2s (the account section).
+function dayHeadingElements(): HTMLElement[] {
   return screen
     .getAllByRole('heading', { level: 2 })
-    .map((h) => h.textContent ?? '')
+    .filter((h) => h.closest('section.activity-day') !== null)
 }
 
 // cardsOfDay returns the activity cards under the day whose heading starts
 // with label.
 function cardsOfDay(label: string): HTMLElement[] {
-  const heading = screen
-    .getAllByRole('heading', { level: 2 })
-    .find((h) => h.textContent?.startsWith(label))
+  const heading = dayHeadingElements().find((h) =>
+    h.textContent?.startsWith(label),
+  )
   const day = heading?.closest('section')
   if (!day) throw new Error(`no day ${label}`)
   return within(day).getAllByRole('listitem')
 }
 
 function allCards(): HTMLElement[] {
-  return screen
-    .getAllByRole('heading', { level: 2 })
-    .flatMap((h) => cardsOfDay(h.textContent ?? ''))
+  return dayHeadingElements().flatMap((h) => cardsOfDay(h.textContent ?? ''))
 }
 
 function cardSport(card: HTMLElement): string {

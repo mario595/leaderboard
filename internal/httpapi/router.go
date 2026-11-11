@@ -22,7 +22,11 @@ type Deps struct {
 	Seasons    seasonFinder
 	Standings  standingsQuerier
 	Activities activityLister
-	SPA        http.Handler
+	// Accounts and Revoke enable DELETE /api/me (account deletion); both or
+	// neither.
+	Accounts userDeleter
+	Revoke   revokeFunc
+	SPA      http.Handler
 }
 
 // NewRouter builds the http router with all the application routes.
@@ -45,6 +49,9 @@ func NewRouter(deps Deps) http.Handler {
 		r.Route("/api", func(r chi.Router) {
 			r.Use(requireAuth(deps.Sessions, deps.Users, deps.Logger))
 			r.Get("/me", meHandler(deps.Logger))
+			if deps.Accounts != nil && deps.Revoke != nil {
+				r.Delete("/me", deleteAccountHandler(deps.Revoke, deps.Accounts, deps.Sessions, time.Now, deps.Logger))
+			}
 			if deps.Seasons != nil && deps.Standings != nil {
 				r.Get("/leaderboard", leaderboardHandler(deps.Seasons, deps.Standings, time.Now, deps.Logger))
 			}

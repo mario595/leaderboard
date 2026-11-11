@@ -135,7 +135,14 @@ export function PrivacyPage() {
           <ul>
             <li>Mientras seas miembro del grupo.</li>
             <li>
-              Si retiras el acceso a la aplicación en Strava (
+              Puedes irte cuando quieras desde «Mis actividades», con el botón{' '}
+              <strong>«Desconectar y borrar mis datos»</strong>: quitamos el
+              acceso de la aplicación a tu Strava, borramos al momento tu
+              cuenta, tus actividades, tus tokens y tus sesiones, y te mostramos
+              la confirmación del borrado por escrito.
+            </li>
+            <li>
+              También puedes retirar el acceso a la aplicación en Strava (
               <a
                 href="https://www.strava.com/settings/apps"
                 target="_blank"
@@ -143,8 +150,10 @@ export function PrivacyPage() {
               >
                 Ajustes → Mis aplicaciones
               </a>
-              ), Strava nos avisa y borramos tu cuenta, tus actividades y tus
-              tokens. También puedes pedirlo por email.
+              ): Strava nos avisa y borramos lo mismo en cuanto llega el aviso.
+              Como entonces no estás en la aplicación, esta política es la
+              confirmación de que el borrado se hace; si quieres además una
+              confirmación por email, pídela.
             </li>
             <li>
               Las copias de seguridad diarias se guardan{' '}

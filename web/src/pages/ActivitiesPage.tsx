@@ -4,6 +4,7 @@ import { formatSeasonRange, groupByDay } from '../api/format'
 import { useActivities } from '../api/useActivities'
 import { useApi } from '../api/useApi'
 import { useAuth } from '../auth/useAuth'
+import { AccountSection } from '../components/AccountSection'
 import { ActivityDay } from '../components/ActivityDay'
 import { EmptyState } from '../components/EmptyState'
 import { AlertIcon, CalendarIcon, RunIcon } from '../components/icons'
@@ -14,8 +15,18 @@ import { StatSummary } from '../components/StatSummary'
 // newest first, with "Cargar más" while there are older ones. My rank and
 // points come from a second request (the leaderboard), loaded in parallel; the
 // activities show even if that one fails. States: loading (skeleton), no
-// season (404), error (with retry), empty, ready.
+// season (404), error (with retry), empty, ready. Below the feed, in every
+// state, the member's account section (leave and delete my data).
 export function ActivitiesPage() {
+  return (
+    <>
+      <ActivitiesFeed />
+      <AccountSection />
+    </>
+  )
+}
+
+function ActivitiesFeed() {
   // Hooks first: React needs the same hooks in the same order on every render.
   const feed = useActivities()
   const board = useApi<Leaderboard>('/api/leaderboard')

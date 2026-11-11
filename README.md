@@ -23,6 +23,7 @@ Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What
 - A web frontend (React, TypeScript, Vite) with the Strava login page, the leaderboard, the member's own activities (grouped by day, with the reason when an activity scored nothing) and the scoring rules (`web/`), embedded in the Go binary: one binary serves the pages and the API (`internal/spa`)
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
+- Account deletion from the app, with the Strava access revoked and a written confirmation page
 - A privacy policy and terms of use, public and linked from every page with the support contact (see [Legal pages](#legal-pages)), and a consent step before a new member connects Strava (`/join`)
 - A health endpoint, structured logging and graceful shutdown; a request the browser abandons is logged at Debug with status 499, not as a server error
 - CI (format, vet, tests, lint)
@@ -147,6 +148,7 @@ The image has no shell, so `docker exec` cannot open one: use the CLI as above, 
 | `GET /invite/{code}` | public | An invitation link: keeps the code in the session and sends the browser to the consent page (`/join`), whose button starts the Strava sign-in |
 | `POST /auth/logout` | public | Ends the session (a POST, so another site cannot trigger it) |
 | `GET /api/me` | signed in | The current user, without any token |
+| `DELETE /api/me` | signed in | Deletes the current user's account: revokes the app on Strava, deletes everything about them and every session, and answers with the confirmation (`deletedAt`, `backupsGoneBy`) |
 | `GET /api/me/activities` | signed in | The member's own activities in the season (default: current; `?season=<id>`), newest first, every activity with its points (often 0), competition flag and `zeroReason` (why it scored nothing: `sport`, `short` or `daily_cap`; `""` when it scored). Pages of `?limit=` (1 to 100, default 50); pass the response's `nextCursor` as `?cursor=` for the next page (`null` on the last one). Moving time in seconds, distance in metres. |
 | `GET /api/leaderboard` | signed in | Ranking for the season covering today (UTC date); `?season=<id>` for another season. Every member is listed, with 0 points if they have none; ties share a rank (1, 2, 2, 4). `404` when no season covers today. |
 | `GET /webhook/strava` | public | Strava's subscription check: echoes the challenge if the verify token matches |
@@ -302,7 +304,12 @@ For each member the app stores:
 - the webhook events Strava sends about them, until processed;
 - the backfill jobs that import their seasons.
 
-Revoking the app in Strava (Settings → My Apps → Revoke Access) deletes all of it: Strava sends a deauthorization event, and the app removes the member, their activities and their events in one transaction. Any open session of that member stops working on its next request. Signing in again starts from scratch.
+A member can delete all of it in two ways:
+
+- **In the app:** "Desconectar y borrar mis datos" at the end of "Mis actividades" (`DELETE /api/me`). The server revokes the app's access on Strava (`POST /oauth/deauthorize`), then deletes the member, their activities, events and backfill jobs, and every session they have on any device. A failed revoke is logged and the deletion goes on. The member lands on `/account-deleted`, which is the written confirmation Strava requires (API Policy 2.5): the app has no email address to send one to. It shows what was deleted, when, and the date by which backups no longer hold it (14 days, the snapshot retention). Strava then sends a deauthorization event, which finds nobody left.
+- **On Strava** (Settings → My Apps → Revoke Access): Strava sends a deauthorization event, and the app removes the member, their activities and their events in one transaction. Any open session of that member stops working on its next request. The member isn't in the app at that moment, so the privacy policy is the confirmation, plus an email on request.
+
+Signing in again starts from scratch, and needs a new invitation.
 
 ## Legal pages
 
