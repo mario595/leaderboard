@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -21,8 +22,13 @@ type fakeUserStore struct {
 	asked []int64
 }
 
-func (f *fakeUserStore) GetByID(_ context.Context, id int64) (store.User, error) {
+// GetByID behaves like database/sql on a done context: it fails with the
+// context's error, wrapped like the real store wraps it.
+func (f *fakeUserStore) GetByID(ctx context.Context, id int64) (store.User, error) {
 	f.asked = append(f.asked, id)
+	if err := ctx.Err(); err != nil {
+		return store.User{}, fmt.Errorf("get user by id: %w", err)
+	}
 	if f.err != nil {
 		return store.User{}, f.err
 	}

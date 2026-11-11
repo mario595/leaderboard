@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,10 +26,17 @@ import (
 // through the same session manager the router uses.
 func newAPIApp(t *testing.T, users userGetter) *authApp {
 	t.Helper()
+	return newAPIAppWithLogger(t, users, slog.New(slog.DiscardHandler))
+}
+
+// newAPIAppWithLogger is newAPIApp with the router's logger given, for tests
+// that look at the log.
+func newAPIAppWithLogger(t *testing.T, users userGetter, logger *slog.Logger) *authApp {
+	t.Helper()
 
 	sessions := scs.New()
 	router := NewRouter(Deps{
-		Logger:   slog.New(slog.DiscardHandler),
+		Logger:   logger,
 		Sessions: sessions,
 		Users:    users,
 	})
@@ -61,6 +69,84 @@ func TestRouter_apiRequiresLogin(t *testing.T) {
 			status, _, _, _ := app.do(t, tc.path)
 
 			testutil.AssertEqual(t, "status", tc.wantStatus, status)
+		})
+	}
+}
+
+// A client that leaves while requireAuth looks up its user is not a server
+// error: Debug, no Error line, and 499 in the request log. A real store
+// failure still is (positive control).
+func TestRouter_cancelledRequest(t *testing.T) {
+	tests := []struct {
+		name      string
+		cancelled bool
+		storeErr  error
+		// What the request log and the response must show.
+		wantStatus int
+		wantErrors int // lines at ERROR
+		wantDebug  int // "request canceled by client" lines at DEBUG
+	}{
+		{
+			name:       "client_gone",
+			cancelled:  true,
+			wantStatus: 499,
+			wantErrors: 0,
+			wantDebug:  1,
+		},
+		{
+			name:       "store_failure",
+			cancelled:  false,
+			storeErr:   errors.New("disk I/O error"),
+			wantStatus: http.StatusInternalServerError,
+			wantErrors: 1,
+			wantDebug:  0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			users := &fakeUserStore{user: store.User{ID: 42}}
+			app := newAPIAppWithLogger(t, users, logger)
+			_, _, _, set := app.do(t, "/test-login")
+			cookie := sessionCookie(t, set)
+			// Only the /api/me request below goes into the log under test.
+			buf.Reset()
+			users.err = tc.storeErr
+
+			ctx := t.Context()
+			if tc.cancelled {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			status, _, _, _ := app.doCtx(t, ctx, "/api/me", cookie)
+
+			testutil.AssertEqual(t, "response status", tc.wantStatus, status)
+			// The store was really asked: the 499 comes from its error, not
+			// from a shortcut before the lookup.
+			testutil.AssertEqual(t, "user lookups", 1, len(users.asked))
+
+			var requestLines, errorLines, debugLines int
+			for _, line := range logLines(t, &buf) {
+				switch {
+				case line["msg"] == "request":
+					requestLines++
+					testutil.AssertEqual[any](t, "request log status", float64(tc.wantStatus), line["status"])
+				case line["level"] == "ERROR":
+					errorLines++
+					// The log says what failed; "internal error" is only the response.
+					testutil.AssertEqual[any](t, "error msg", "look up session user", line["msg"])
+					testutil.AssertEqual[any](t, "user_id", float64(42), line["user_id"])
+				case line["level"] == "DEBUG" && line["msg"] == "request canceled by client":
+					debugLines++
+					testutil.AssertEqual[any](t, "user_id", float64(42), line["user_id"])
+				}
+			}
+			testutil.AssertEqual(t, "request log lines", 1, requestLines)
+			testutil.AssertEqual(t, "error lines", tc.wantErrors, errorLines)
+			testutil.AssertEqual(t, "debug lines", tc.wantDebug, debugLines)
 		})
 	}
 }
