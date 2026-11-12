@@ -24,6 +24,7 @@ Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What
 - A personal activity list: each of the member's activities in a season, newest first, with points, the competition flag and why an activity scored nothing, paginated (`GET /api/me/activities`)
 - SQLite storage with versioned migrations
 - Account deletion from the app, with the Strava access revoked and a written confirmation page
+- Backups that honour deletions: snapshots kept 14 days, manual copies 30 days at most, and `server prune-revoked` to delete again, after a restore, the members who left since the backup (see [Backups](#backups))
 - A privacy policy and terms of use, public and linked from every page with the support contact (see [Legal pages](#legal-pages)), and a consent step before a new member connects Strava (`/join`)
 - A health endpoint, structured logging and graceful shutdown; a request the browser abandons is logged at Debug with status 499, not as a server error
 - CI (format, vet, tests, lint)
@@ -238,16 +239,32 @@ Production runs on [Fly.io](https://fly.io) at <https://ligadaples.fly.dev>: one
 
 ### Backups
 
-- **Automatic:** Fly snapshots the volume every day and keeps 14 days (`fly volumes snapshots list <volume id>`).
-- **Manual, before risky changes** (a migration, a data fix, the end of a season): `server backup` writes a consistent copy with SQLite's `VACUUM INTO`, while the app runs. Write it to `/tmp`, which is not on the volume and is cleared on the next restart (Fly's sftp cannot delete files):
+Backups hold the members' Strava data and tokens. A member who leaves must be gone from every copy within 30 days (Strava API Policy 7.4(b)), and the privacy policy promises it.
+
+- **Automatic:** Fly snapshots the volume every day and keeps 14 days (`fly volumes snapshots list <volume id>`; `snapshot_retention` in `fly.toml`).
+- **Manual, before risky changes** (a migration, a data fix, the end of a season): `server backup` writes a consistent copy with SQLite's `VACUUM INTO`, while the app runs. Write it to `/tmp`, which is not on the volume, download it, then restart the machine: `/tmp` is only cleared on a restart, the image has no `rm`, and Fly's sftp cannot delete files. The restart takes a few seconds; webhooks missed meanwhile come back with the reconcile job.
   ```
   fly ssh console -C "/server backup -out /tmp/backup-YYYY-MM-DD.db"
-  fly ssh sftp get /tmp/backup-YYYY-MM-DD.db
+  fly ssh sftp get /tmp/backup-YYYY-MM-DD.db ~/leaderboard-backups/backup-YYYY-MM-DD.db
+  fly machine restart
   ```
-  The command refuses an existing file. A backup holds the members' Strava tokens: keep it private.
+  The command refuses an existing file. Keep the copies only in `~/leaderboard-backups/` on the operator's machine: never in the repo (`*.db` is git-ignored), an issue or a chat. **Delete each copy within 30 days** (deleting the file is enough):
+  ```
+  find ~/leaderboard-backups -name 'backup-*.db' -mtime +30 -delete
+  ```
 - **What a total loss costs:** activities and points come back with a backfill from Strava, seasons are recreated with the CLI; members need a new invitation link and one login each.
 
-Restore from a snapshot: create a volume from it (`fly volumes create leaderboard_data --snapshot-id <snapshot id> --region cdg --size 1`), then run the machine on the new volume instead of the old one (see Fly's [volume snapshot docs](https://fly.io/docs/volumes/snapshots/)). These steps have not been rehearsed yet: try them once on a scratch app before relying on them. A downloaded backup is mainly an off-site copy; restoring it would mean uploading it with `fly ssh sftp put` and swapping it in while the app is stopped, which the image (no shell) does not support yet.
+Restore from a snapshot:
+
+1. Create a volume from it (`fly volumes create leaderboard_data --snapshot-id <snapshot id> --region cdg --size 1`), then run the machine on the new volume instead of the old one (see Fly's [volume snapshot docs](https://fly.io/docs/volumes/snapshots/)).
+2. **Delete again the members who left after the snapshot was taken.** The restored database has their data back and nothing in it remembers they left, but Strava does: their authorization is gone, whichever way they left. List them first, then delete:
+   ```
+   fly ssh console -C "/server prune-revoked"
+   fly ssh console -C "/server prune-revoked -delete"
+   ```
+   It makes one Strava call (`GET /athlete`) per member. Only a rejected authorization (`ErrUnauthorized`) counts as revoked; a rate limit or a network error is printed and the member is kept, so run it again. If Strava rejects every member it refuses to delete: that means the app's `STRAVA_CLIENT_ID`/`STRAVA_CLIENT_SECRET` are wrong, not that the whole group left.
+
+These steps have not been rehearsed yet: try them once on a scratch app before relying on them. A downloaded backup is mainly an off-site copy; restoring it would mean uploading it with `fly ssh sftp put` and swapping it in while the app is stopped, which the image (no shell) does not support yet.
 
 ## Development
 
@@ -306,7 +323,7 @@ For each member the app stores:
 
 A member can delete all of it in two ways:
 
-- **In the app:** "Desconectar y borrar mis datos" at the end of "Mis actividades" (`DELETE /api/me`). The server revokes the app's access on Strava (`POST /oauth/deauthorize`), then deletes the member, their activities, events and backfill jobs, and every session they have on any device. A failed revoke is logged and the deletion goes on. The member lands on `/account-deleted`, which is the written confirmation Strava requires (API Policy 2.5): the app has no email address to send one to. It shows what was deleted, when, and the date by which backups no longer hold it (14 days, the snapshot retention). Strava then sends a deauthorization event, which finds nobody left.
+- **In the app:** "Desconectar y borrar mis datos" at the end of "Mis actividades" (`DELETE /api/me`). The server revokes the app's access on Strava (`POST /oauth/deauthorize`), then deletes the member, their activities, events and backfill jobs, and every session they have on any device. A failed revoke is logged and the deletion goes on. The member lands on `/account-deleted`, which is the written confirmation Strava requires (API Policy 2.5): the app has no email address to send one to. It shows what was deleted, when, and the date by which backups no longer hold it (30 days, the longest any backup is kept: see [Backups](#backups)). Strava then sends a deauthorization event, which finds nobody left.
 - **On Strava** (Settings → My Apps → Revoke Access): Strava sends a deauthorization event, and the app removes the member, their activities and their events in one transaction. Any open session of that member stops working on its next request. The member isn't in the app at that moment, so the privacy policy is the confirmation, plus an email on request.
 
 Signing in again starts from scratch, and needs a new invitation.
