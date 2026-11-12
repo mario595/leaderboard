@@ -156,9 +156,12 @@ export function PrivacyPage() {
               confirmación por email, pídela.
             </li>
             <li>
-              Las copias de seguridad diarias se guardan{' '}
-              <strong>14 días</strong>: tus datos desaparecen de ellas como
-              mucho 14 días después del borrado.
+              Copias de seguridad: las diarias se guardan 14 días, y las
+              manuales (antes de un cambio delicado) 30 días como máximo, solo
+              en el equipo del administrador. Tus datos desaparecen{' '}
+              <strong>de todas las copias como mucho 30 días</strong> después
+              del borrado. Si alguna vez hay que restaurar una copia anterior a
+              tu baja, volvemos a borrar tus datos nada más restaurarla.
             </li>
           </ul>
         </section>

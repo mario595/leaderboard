@@ -33,7 +33,7 @@ export function AccountDeletedPage() {
         <p>
           {deletion
             ? `Las copias de seguridad que aún los contengan desaparecen como muy tarde el ${formatLongDate(deletion.backupsGoneBy)}.`
-            : 'Las copias de seguridad que aún los contengan desaparecen como muy tarde 14 días después del borrado.'}
+            : 'Las copias de seguridad que aún los contengan desaparecen como muy tarde 30 días después del borrado.'}
         </p>
         <p>
           Esta página es tu confirmación por escrito. Si necesitas algo más,

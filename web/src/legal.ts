@@ -10,7 +10,7 @@ export const supportEmail = 'leaderboard.oxidant225@aleeas.com'
 export const controllerName = 'Mario Martinez Campos'
 
 // policyUpdated is the date of the last change to either page, as shown.
-export const policyUpdated = '11 de noviembre de 2026'
+export const policyUpdated = '12 de noviembre de 2026'
 
 // stravaAthleteURL is the member's own profile on Strava (Policy 2.4: a clear
 // link to navigate to their Strava account).
