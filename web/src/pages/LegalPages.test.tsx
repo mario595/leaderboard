@@ -29,7 +29,13 @@ describe('PrivacyPage', () => {
     ['the legal basis', /artículo 6\.1\.a/],
     ['who sees what', /Tus actividades solo las ves tú/],
     ['the host and region', /región de París/],
-    ['the backup retention', /14 días/],
+    ['the snapshot retention', /se guardan 14 días/],
+    ['the manual copy retention', /30 días como máximo/],
+    [
+      'gone from every copy within 30 days (7.4(b))',
+      /de todas las copias como mucho 30 días/,
+    ],
+    ['deleted again after a restore', /volvemos a borrar/],
     [
       'leaving from the app, with a written confirmation (2.5)',
       /Desconectar y borrar mis datos/,

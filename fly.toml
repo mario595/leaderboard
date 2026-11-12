@@ -38,6 +38,11 @@ kill_timeout = 30
 [mounts]
   source = "leaderboard_data"
   destination = "/data"
+  # Daily snapshots, kept 14 days. A deleted member's data must be gone from
+  # every copy within 30 days (Strava API Policy 7.4(b)); 14 leaves margin and
+  # is long enough to notice a bad migration. Applies only to volumes that
+  # deploy creates: the existing one was set with
+  # `fly volumes update <id> --snapshot-retention 14`.
   snapshot_retention = 14
 
 [[vm]]

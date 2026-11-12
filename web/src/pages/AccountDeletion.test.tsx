@@ -9,7 +9,7 @@ import { formatDateTime, formatLongDate } from '../api/format'
 const ana = { id: 1, stravaId: 12345678, firstName: 'Ana', lastName: 'García' }
 const deletion = {
   deletedAt: '2026-11-11T15:04:05Z',
-  backupsGoneBy: '2026-11-25',
+  backupsGoneBy: '2026-12-11',
 }
 
 afterEach(() => {
@@ -69,7 +69,7 @@ describe('account deletion', () => {
       screen.getByText(/El 11 de noviembre de 2026, 07:04 borramos tu cuenta/),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/como muy tarde el 25 de noviembre de 2026/),
+      screen.getByText(/como muy tarde el 11 de diciembre de 2026/),
     ).toBeInTheDocument()
     // Logged out: the footer has no Strava account link any more.
     expect(
@@ -115,7 +115,7 @@ describe('account deletion', () => {
         name: 'Tus datos se han borrado',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/14 días después del borrado/)).toBeInTheDocument()
+    expect(screen.getByText(/30 días después del borrado/)).toBeInTheDocument()
   })
 })
 

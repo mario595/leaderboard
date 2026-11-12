@@ -42,7 +42,8 @@ func TestDeleteAccount(t *testing.T) {
 		t.Fatalf("body %q is not JSON: %v", rec.Body.String(), err)
 	}
 	testutil.AssertEqual(t, "deletedAt", "2026-11-11T15:04:05Z", body["deletedAt"])
-	testutil.AssertEqual(t, "backupsGoneBy", "2026-11-25", body["backupsGoneBy"])
+	// 30 days: the longest any backup lives (manual copies; snapshots 14).
+	testutil.AssertEqual(t, "backupsGoneBy", "2026-12-11", body["backupsGoneBy"])
 	if strings.Contains(rec.Body.String(), "access") {
 		t.Errorf("body %q mentions tokens", rec.Body.String())
 	}

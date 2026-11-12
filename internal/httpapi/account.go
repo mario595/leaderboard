@@ -13,9 +13,11 @@ import (
 )
 
 // backupRetentionDays is how long a deleted member's data can survive in
-// backups: the daily volume snapshots are kept 14 days (fly.toml,
-// snapshot_retention). Shown on the deletion confirmation.
-const backupRetentionDays = 14
+// backups: the longest-lived kind, manual copies (`server backup`), are kept
+// at most 30 days; the daily volume snapshots, 14 (fly.toml,
+// snapshot_retention). 30 is also Strava's limit (API Policy 7.4(b)). Shown
+// on the deletion confirmation.
+const backupRetentionDays = 30
 
 // revokeFunc revokes the app's access to the user on Strava. main wires it to
 // strava.Client.Deauthorize.

@@ -430,6 +430,7 @@ func newFakeStrava(t *testing.T) *fakeStrava {
 		f.mu.Lock()
 		f.apiCalls++
 		f.apiAuth = r.Header.Get("Authorization")
+		f.apiPath = r.URL.Path
 		status, delay := f.apiStatus, f.delay
 		f.mu.Unlock()
 		time.Sleep(delay)

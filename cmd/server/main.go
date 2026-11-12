@@ -59,13 +59,18 @@ func main() {
 			fmt.Fprintf(os.Stderr, "backfill failed: %v\n", err)
 			os.Exit(1)
 		}
+	case "prune-revoked":
+		if err := runPrune(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "prune-revoked failed: %v\n", err)
+			os.Exit(1)
+		}
 	case "backup":
 		if err := runBackup(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "backup failed: %v\n", err)
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season, backfill, backup or serve")
+		fmt.Fprintln(os.Stderr, "Invalid command. Use invite, season, backfill, backup, prune-revoked or serve")
 		os.Exit(2)
 	}
 }
@@ -83,6 +88,27 @@ func runBackfill(args []string) error {
 	seasons := store.NewSeasonStore(db)
 	jobs := store.NewBackfillStore(db)
 	return backfillCommand(ctx, seasons, jobs, args, os.Stdout)
+}
+
+func runPrune(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, db, err := openDatabase(ctx)
+	if err != nil {
+		return fmt.Errorf("openDatabase: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if cfg.StravaClientID == "" || cfg.StravaClientSecret == "" {
+		return errors.New("STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are required to check members on Strava")
+	}
+	users := store.NewUserStore(db)
+	api := newStravaAPI(cfg, users)
+	check := func(ctx context.Context, u store.User) error {
+		return api.ForUser(u.ID, userToken(u)).CheckAccess(ctx)
+	}
+	return pruneCommand(ctx, users, check, args, os.Stdout)
 }
 
 func runBackup(args []string) error {
@@ -166,10 +192,7 @@ func runServer() error {
 	secureCookies := cfg.Env == "prod"
 	sessions, stopSessions := auth.NewSessionManager(db, secureCookies)
 	defer stopSessions()
-	// One request every 6s, bursts of 5: at most 150 per 15 minutes, under
-	// Strava's 200, leaving room for logins. Shared by every Strava client.
-	limiter := rate.NewLimiter(rate.Every(6*time.Second), 5)
-	api := strava.New(oauthCfg, httpClient, userStore, strava.DefaultBaseURL, limiter)
+	api := newStravaAPI(cfg, userStore)
 	backfillClient := func(userID int64, tok *oauth2.Token) backfill.Client {
 		return api.ForUser(userID, tok)
 	}
@@ -226,11 +249,7 @@ func runServer() error {
 			Activities: activityStore,
 			Accounts:   userStore,
 			Revoke: func(ctx context.Context, u store.User) error {
-				return api.ForUser(u.ID, &oauth2.Token{
-					AccessToken:  u.AccessToken,
-					RefreshToken: u.RefreshToken,
-					Expiry:       u.TokenExpiresAt,
-				}).Deauthorize(ctx)
+				return api.ForUser(u.ID, userToken(u)).Deauthorize(ctx)
 			},
 			SPA: spa.Handler(),
 		},
@@ -273,6 +292,27 @@ func runServer() error {
 	logger.Info("server stopped")
 
 	return nil
+}
+
+// newStravaAPI builds the Strava API client shared by every member's client:
+// the app's OAuth config, an HTTP client with a 10 s timeout, the user store
+// to save refreshed tokens, and one rate limiter. The limiter allows one
+// request every 6 s in bursts of 5: at most 150 per 15 minutes, under
+// Strava's 200, leaving room for logins. A CLI command gets its own limiter,
+// apart from the running server's.
+func newStravaAPI(cfg config.Config, users *store.UserStore) *strava.API {
+	oauthCfg := auth.NewOauthConfig(cfg.StravaClientID, cfg.StravaClientSecret, cfg.BaseURL)
+	limiter := rate.NewLimiter(rate.Every(6*time.Second), 5)
+	return strava.New(oauthCfg, &http.Client{Timeout: 10 * time.Second}, users, strava.DefaultBaseURL, limiter)
+}
+
+// userToken is the stored OAuth token of u, as a Strava client starts from.
+func userToken(u store.User) *oauth2.Token {
+	return &oauth2.Token{
+		AccessToken:  u.AccessToken,
+		RefreshToken: u.RefreshToken,
+		Expiry:       u.TokenExpiresAt,
+	}
 }
 
 // OpenDatabase opens a DB connection. Caller must close it.
