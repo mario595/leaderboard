@@ -2,6 +2,12 @@
 
 A small web app for my training group: members sign in with their Strava account, the app reads their activities, awards points, and shows a ranking for the season. It is live at <https://ligadaples.fly.dev> and used by the group.
 
+| Leaderboard | My activities |
+|---|---|
+| ![The season's ranking: position, points and every member](docs/screenshots/leaderboard.png) | ![A member's activities grouped by day, with the points each one scored and why some scored nothing](docs/screenshots/activities.png) |
+
+The screenshots use fictional members. The interface is in Spanish, the group's language.
+
 ## Why I built it
 
 I wanted to learn Go, and I learn best by building something real people use. My training group already ran a points league, so it was a good fit: small enough to finish, but with the problems a tutorial skips:
@@ -17,13 +23,13 @@ The project is built with agentic coding, using [Claude Code](https://claude.com
 
 - **Claude acted as a senior engineer and mentor.** It recommended the stack, split the work into small tickets (GitHub issues on a [project board](https://github.com/users/mario595/projects/6)), and wrote a step-by-step spec for each one, posted on its issue. It also explained where Go differs from the Java and Python I know.
 - **I wrote most of the Go backend.** I followed each spec step, then asked for a review, which covered idioms, conventions, pitfalls and why they matter. When I got stuck, Claude explained the problem and pointed the way rather than writing the solution.
-- **Test-first pairing (from [#52](https://github.com/mario595/leaderboard/issues/52) on).** Claude writes a failing test for each step, I write the code that makes it pass, and I review the tests too. Tests are checked with mutation checks: break the code on purpose and see a test fail.
+- **Test-first pairing.** Claude writes a failing test for each step, I write the code that makes it pass, and I review the tests too. Tests are checked with mutation checks: break the code on purpose and see a test fail.
 - **What Claude wrote:**
+  - the tests, as the spec for each step;
+  - the doc comments, written after review so they describe the final code;
   - most of the React frontend;
   - the legal pages;
-  - three tickets end to end, Go included, once the core was done: the consent step ([#55](https://github.com/mario595/leaderboard/issues/55)), account deletion ([#56](https://github.com/mario595/leaderboard/issues/56)) and backup retention ([#57](https://github.com/mario595/leaderboard/issues/57));
-  - the tests from #52 on;
-  - the doc comments, written after review so they describe the final code.
+  - three tickets end to end, Go included, once the core was done: the consent step ([#55](https://github.com/mario595/leaderboard/issues/55)), account deletion ([#56](https://github.com/mario595/leaderboard/issues/56)) and backup retention ([#57](https://github.com/mario595/leaderboard/issues/57)).
 
   Commits with Claude's work carry a `Co-Authored-By` line.
 - **Process like a team's.** Each ticket has its own branch and a pull request that closes its issue. I review and merge, CI must pass, and `main` deploys automatically.
