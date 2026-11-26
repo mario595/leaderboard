@@ -1,12 +1,53 @@
 # Leaderboard
 
-A small web app for a training group: members sign in with their Strava account, the app reads their activities, awards points, and shows a ranking.
+A small web app for my training group: members sign in with their Strava account, the app reads their activities, awards points, and shows a ranking for the season.
 
-This is also a **learning project** for Go. The code is written step by step, ticket by ticket, with a focus on idiomatic Go and good practices. See [CLAUDE.md](CLAUDE.md) for how the work is organized.
+| Leaderboard | My activities |
+|---|---|
+| ![The season's ranking: position, points and every member](docs/screenshots/leaderboard.png) | ![A member's activities grouped by day, with the points each one scored and why some scored nothing](docs/screenshots/activities.png) |
 
-## Status
+The screenshots use fictional members. The interface is in Spanish, the group's language.
 
-Live for the group at <https://ligadaples.fly.dev> (see [Deploy](#deploy)). What exists today:
+## Why I built it
+
+I wanted to learn Go, and I learn best by building something real people use. My training group already ran a points league, so it was a good fit: small enough to finish, but with the problems a tutorial skips:
+
+- OAuth with a third-party API, plus token refresh.
+- Webhooks that can be lost, and the background work needed to recover them.
+- Rate limits that are low enough to shape the design.
+- A real deployment, and the privacy rules that come with handling other people's data.
+
+## How I built it: AI as a mentor, not a ghostwriter
+
+The project is built with agentic coding, using [Claude Code](https://claude.com/claude-code). The goal was to learn Go, not just to get an app, so the AI's role was set up on purpose. The rules are in [CLAUDE.md](CLAUDE.md).
+
+- **Claude acted as a senior engineer and mentor.** It recommended the stack, split the work into small tickets (GitHub issues on a [project board](https://github.com/users/mario595/projects/6)), and wrote a step-by-step spec for each one, posted on its issue. It also explained where Go differs from the Java and Python I know.
+- **I wrote most of the Go backend.** I followed each spec step, then asked for a review, which covered idioms, conventions, pitfalls and why they matter. When I got stuck, Claude explained the problem and pointed the way rather than writing the solution.
+- **Test-first pairing.** Claude writes a failing test for each step, I write the code that makes it pass, and I review the tests too. Tests are checked with mutation checks: break the code on purpose and see a test fail.
+- **What Claude wrote:**
+  - the tests, as the spec for each step;
+  - the doc comments, written after review so they describe the final code;
+  - most of the React frontend;
+  - the legal pages;
+  - three tickets end to end, Go included, once the core was done: the consent step ([#55](https://github.com/mario595/leaderboard/issues/55)), account deletion ([#56](https://github.com/mario595/leaderboard/issues/56)) and backup retention ([#57](https://github.com/mario595/leaderboard/issues/57)).
+
+  Commits with Claude's work carry a `Co-Authored-By` line.
+- **Process like a team's.** Each ticket has its own branch and a pull request that closes its issue. I review and merge, CI must pass, and `main` deploys automatically.
+
+## Things worth a look
+
+- **Events that can't get lost.** Strava webhooks are stored and acknowledged at once, then processed by a background worker with retries (`internal/webhook`, `internal/worker`). Strava drops events it can't deliver, so a reconcile job compares each member's recent activities with Strava and repairs any differences (`internal/reconcile`).
+- **One rate limiter for the whole app.** Every Strava request goes through the same limiter: webhooks, backfills and reconciles. That keeps the app under Strava's 200 requests per 15 minutes (`internal/strava`).
+- **Points that are always recomputed.** Saving or deleting an activity recomputes that member's points for the whole day from scratch, never by adding or subtracting. Replays and out-of-order events are therefore harmless (`internal/activity`, `internal/scoring`).
+- **One small binary.** The React frontend is embedded in the Go binary. The Docker image is about 6 MB, on a distroless base, and runs on one Fly.io machine for about $2.60 a month.
+- **Privacy built in.**
+  - Members consent before connecting Strava, and can delete their account from the app.
+  - Backups are kept no longer than the policy allows.
+  - After a backup is restored, a command deletes again the members who left since it was taken (see [Your data](#your-data) and [Backups](#backups)).
+
+## What it does
+
+What exists today:
 
 - Sign in with Strava (OAuth), which updates a member's name and tokens; new members need an invitation link to sign up, managed with a CLI
 - Cookie sessions kept in the database, logout, and a first protected endpoint (`GET /api/me`)
