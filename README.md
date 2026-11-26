@@ -1,6 +1,6 @@
 # Leaderboard
 
-A small web app for my training group: members sign in with their Strava account, the app reads their activities, awards points, and shows a ranking for the season. It is live at <https://ligadaples.fly.dev> and used by the group.
+A small web app for my training group: members sign in with their Strava account, the app reads their activities, awards points, and shows a ranking for the season.
 
 | Leaderboard | My activities |
 |---|---|
